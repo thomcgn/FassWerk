@@ -1,0 +1,30 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:fasswerk;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+  flyway:
+    enabled: false
+
+app:
+  qr:
+    scan-base-url: http://localhost:8080
+  auth:
+    cleanup:
+      enabled: false
+      cron: "0 0 0 * * *"
+      cleanup-expired-refresh-tokens: false
+  jwt:
+    secret: test-secret-for-jwt-signing-that-is-long-enough
+    issuer: test-issuer
+    access-token-minutes: 60
+    refresh-token-days: 7
+
+

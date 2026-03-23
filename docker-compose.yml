@@ -1,0 +1,64 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: fasswerk-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: fasswerk
+      POSTGRES_USER: fasswerk
+      POSTGRES_PASSWORD: fasswerk
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fasswerk -d fasswerk"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    image: fasswerk/backend:latest
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: fasswerk-backend
+    restart: unless-stopped
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/fasswerk
+      DB_USER: fasswerk
+      DB_PASSWORD: fasswerk
+      FLYWAY_CONNECT_RETRIES: 30
+      FLYWAY_CONNECT_RETRIES_INTERVAL: 2s
+      QR_SCAN_BASE_URL: http://localhost:3000
+      JWT_SECRET: docker-dev-secret-change-me-please-at-least-32-chars
+      JWT_ISSUER: fasswerk-backend
+      JWT_ACCESS_TOKEN_MINUTES: 120
+      JWT_REFRESH_TOKEN_DAYS: 14
+      AUTH_CLEANUP_ENABLED: true
+      AUTH_CLEANUP_CRON: "0 */30 * * * *"
+      AUTH_CLEANUP_REFRESH_TOKENS: true
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+
+  frontend:
+    image: fasswerk/frontend:latest
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: fasswerk-frontend
+    restart: unless-stopped
+    environment:
+      BACKEND_BASE_URL: http://backend:8080
+    depends_on:
+      backend:
+        condition: service_started
+    ports:
+      - "3000:3000"
+
+volumes:
+  postgres_data:
+

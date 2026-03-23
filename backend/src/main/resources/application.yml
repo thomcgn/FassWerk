@@ -1,0 +1,44 @@
+spring:
+  application:
+    name: backend
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/fasswerk}
+    username: ${DB_USER:fasswerk}
+    password: ${DB_PASSWORD:fasswerk}
+  jpa:
+    hibernate:
+      ddl-auto: none
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    connect-retries: ${FLYWAY_CONNECT_RETRIES:30}
+    connect-retries-interval: ${FLYWAY_CONNECT_RETRIES_INTERVAL:2s}
+
+server:
+  port: ${SERVER_PORT:8080}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,prometheus
+
+app:
+  qr:
+    scan-base-url: ${QR_SCAN_BASE_URL:http://localhost:8080}
+  auth:
+    cleanup:
+      enabled: ${AUTH_CLEANUP_ENABLED:true}
+      cron: ${AUTH_CLEANUP_CRON:0 */30 * * * *}
+      cleanup-expired-refresh-tokens: ${AUTH_CLEANUP_REFRESH_TOKENS:true}
+  jwt:
+    secret: ${JWT_SECRET:change-me-super-long-jwt-secret-at-least-32-characters}
+    issuer: ${JWT_ISSUER:fasswerk-backend}
+    access-token-minutes: ${JWT_ACCESS_TOKEN_MINUTES:120}
+    refresh-token-days: ${JWT_REFRESH_TOKEN_DAYS:14}
+
