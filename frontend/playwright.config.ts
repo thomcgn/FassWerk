@@ -5,7 +5,10 @@ export default defineConfig({
   timeout: 30_000,
   fullyParallel: true,
   retries: 0,
-  reporter: "list",
+  reporter: [
+    ["list"],
+    ["junit", { outputFile: "test-results/playwright/results.xml" }],
+  ],
   use: {
     baseURL: "http://127.0.0.1:3000",
     trace: "retain-on-failure",

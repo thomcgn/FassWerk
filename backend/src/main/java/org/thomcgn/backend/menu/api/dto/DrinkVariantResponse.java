@@ -9,6 +9,7 @@ public record DrinkVariantResponse(
         String displayVolumeName,
         Integer volumeMl,
         BigDecimal price,
+        boolean useStandardPrice,
         String sku,
         boolean active
 ) {

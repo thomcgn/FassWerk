@@ -25,6 +25,31 @@ export type InventoryItem = {
   active: boolean;
 };
 
+export type InventoryItemUpsertRequest = {
+  name: string;
+  linkedDrinkId: number | null;
+  linkedDrinkVariantId: number | null;
+  packageType: "BARREL" | "CRATE" | "BOTTLE" | "BOX" | "SINGLE_BOTTLE";
+  packagesInStock: number;
+  contentPerPackage: number;
+  contentUnit: "MILLILITER" | "LITER" | "PIECE";
+  reorderThreshold: number;
+  minimumStock: number;
+  recommendedReorderAmount?: number;
+  reorderThresholdPackages?: number;
+  minimumStockPackages?: number;
+  recommendedReorderPackages?: number;
+  supplier: string | null;
+  active: boolean;
+};
+
+export type InventoryPackageDefaults = {
+  packageType: InventoryItemUpsertRequest["packageType"];
+  reorderThresholdPackages: number;
+  minimumStockPackages: number;
+  recommendedReorderPackages: number;
+};
+
 export type SessionResponse = {
   id: number;
   tokenId: string;
@@ -36,7 +61,7 @@ export type SessionResponse = {
   current: boolean;
 };
 
-export type ReservationStatus = "PENDING" | "CONFIRMED" | "CHECKED_IN" | "CANCELLED" | "NO_SHOW";
+export type ReservationStatus = "PENDING" | "CONFIRMED" | "CHECKED_IN" | "REJECTED" | "CANCELLED" | "NO_SHOW";
 
 export type Reservation = {
   id: number;
@@ -62,12 +87,11 @@ export type CreateReservationRequest = {
   guestCount: number;
 };
 
-export type TableStatus = "AVAILABLE" | "OCCUPIED" | "RESERVED" | "OUT_OF_SERVICE";
+export type TableStatus = "FREE" | "OCCUPIED" | "RESERVED" | "READY_FOR_PAYMENT";
 
 export type Table = {
   id: number;
   name: string;
-  capacity: number;
   area: string | null;
   status: TableStatus;
   active: boolean;
@@ -80,7 +104,31 @@ export type DrinkVariant = {
   displayVolumeName: string;
   volumeMl: number;
   price: string;
+  useStandardPrice: boolean;
   sku: string | null;
+  active: boolean;
+};
+
+export type VolumePrice = {
+  id: number;
+  volumeMl: number;
+  price: string;
+};
+
+export type DrinkCategory = {
+  id: number;
+  name: string;
+  sortOrder: number;
+  active: boolean;
+};
+
+export type Drink = {
+  id: number;
+  categoryId: number;
+  categoryName: string;
+  name: string;
+  description: string | null;
+  imageUrl: string | null;
   active: boolean;
 };
 
@@ -102,9 +150,132 @@ export type TableOrder = {
   tableName: string;
   reservationId: number | null;
   status: TableOrderStatus;
+  paid: boolean;
   openedAt: string;
   closedAt: string | null;
   total: string;
   items: TableOrderItem[];
+};
+
+export type SplitPaymentItemRequest = {
+  itemId: number;
+  quantity: number;
+};
+
+export type SplitPaymentResponse = {
+  openOrder: TableOrder;
+  paidOrder: TableOrder;
+};
+
+export type RevenuePoint = {
+  label: string;
+  revenue: string;
+};
+
+export type RevenueOverview = {
+  dayRevenue: string;
+  weekRevenue: string;
+  monthRevenue: string;
+  dayConsumedMl: string;
+  weekConsumedMl: string;
+  monthConsumedMl: string;
+  strongestWeekday: string;
+  weekPoints: RevenuePoint[];
+  monthPoints: RevenuePoint[];
+};
+
+export type ShiftWorkerEntry = {
+  id: number | null;
+  employeeName: string;
+  shiftStart: string;
+  shiftEnd: string;
+  hourlyWage: string;
+  workedHours: string;
+  wageCost: string;
+};
+
+export type ShiftSettlement = {
+  id: number | null;
+  settlementDate: string;
+  openingCash: string;
+  otherExpenses: string;
+  dailyRevenue: string;
+  totalWages: string;
+  expectedClosingCash: string;
+  entries: ShiftWorkerEntry[];
+};
+
+export type ShiftWorkerEntryUpsert = {
+  employeeName: string;
+  shiftStart: string;
+  shiftEnd: string;
+  hourlyWage: number;
+};
+
+export type ShiftSettlementUpsertRequest = {
+  openingCash: number;
+  otherExpenses: number;
+  entries: ShiftWorkerEntryUpsert[];
+};
+
+// Sales Tracking Types
+export type DrinkSalesDaily = {
+  id: number;
+  drinkId: number;
+  drinkName: string;
+  drinkVariantId: number | null;
+  drinkVariantName: string | null;
+  saleDate: string;
+  quantitySold: string;
+  volumeSoldMl: string;
+};
+
+export type DrinkSalesWeekly = {
+  id: number;
+  drinkId: number;
+  drinkName: string;
+  drinkVariantId: number | null;
+  drinkVariantName: string | null;
+  weekStartDate: string;
+  quantitySold: string;
+  volumeSoldMl: string;
+  averageDailyQuantity: string;
+  averageDailyVolumeMl: string;
+};
+
+export type ReorderCalculation = {
+  id: number;
+  inventoryItemId: number;
+  inventoryItemName: string;
+  calculationDate: string;
+  currentStockAmount: string;
+  weeklyAverageConsumption: string;
+  recommendedReorderAmount: string;
+  isBelowThreshold: boolean;
+  weeksUntilStockout: string | null;
+};
+
+export type ConsumptionMetadata = {
+  id: number;
+  inventoryItemId: number;
+  leadTimeDays: number;
+  safetyStockFactor: string;
+  weeksLookback: number;
+};
+
+export type ConsumptionMetadataRequest = {
+  leadTimeDays?: number;
+  safetyStockFactor?: number;
+  weeksLookback?: number;
+};
+
+export type SalesConfiguration = {
+  weeksLookback: number;
+  defaultSafetyFactor: number;
+  defaultLeadTimeDays: number;
+  businessTimezone: string;
+  businessDayEndsAt: string;
+  manualBusinessDate: string | null;
+  effectiveBusinessDate: string;
 };
 

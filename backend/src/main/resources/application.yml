@@ -18,6 +18,17 @@ spring:
     locations: classpath:db/migration
     connect-retries: ${FLYWAY_CONNECT_RETRIES:30}
     connect-retries-interval: ${FLYWAY_CONNECT_RETRIES_INTERVAL:2s}
+  mail:
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:1025}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${MAIL_SMTP_AUTH:false}
+          starttls:
+            enable: ${MAIL_SMTP_STARTTLS:false}
 
 server:
   port: ${SERVER_PORT:8080}
@@ -41,4 +52,43 @@ app:
     issuer: ${JWT_ISSUER:fasswerk-backend}
     access-token-minutes: ${JWT_ACCESS_TOKEN_MINUTES:120}
     refresh-token-days: ${JWT_REFRESH_TOKEN_DAYS:14}
+  inventory:
+    package-defaults:
+      BARREL:
+        reorder-threshold-packages: 1.00
+        minimum-stock-packages: 2.00
+        recommended-reorder-packages: 2.00
+      CRATE:
+        reorder-threshold-packages: 2.00
+        minimum-stock-packages: 4.00
+        recommended-reorder-packages: 4.00
+      BOTTLE:
+        reorder-threshold-packages: 12.00
+        minimum-stock-packages: 24.00
+        recommended-reorder-packages: 12.00
+      SINGLE_BOTTLE:
+        reorder-threshold-packages: 24.00
+        minimum-stock-packages: 48.00
+        recommended-reorder-packages: 24.00
+      BOX:
+        reorder-threshold-packages: 5.00
+        minimum-stock-packages: 10.00
+        recommended-reorder-packages: 10.00
+  sales:
+    # Business date handling for night operations
+    business-timezone: ${SALES_BUSINESS_TIMEZONE:Europe/Berlin}
+    # Example: 05:00 means sales from 00:00-04:59 still belong to previous business day
+    business-day-end-time: ${SALES_BUSINESS_DAY_END_TIME:05:00}
+    calculation:
+      # Number of weeks to look back for average consumption calculation
+      weeks-lookback: ${SALES_WEEKS_LOOKBACK:4}
+      # Default safety stock multiplier (e.g., 1.5 = 150% of weekly consumption)
+      default-safety-factor: ${SALES_DEFAULT_SAFETY_FACTOR:1.5}
+      # Default lead time in days for supplier deliveries
+      default-lead-time-days: ${SALES_DEFAULT_LEAD_TIME_DAYS:3}
+  reservation:
+    mail:
+      enabled: ${RESERVATION_MAIL_ENABLED:false}
+      from: ${RESERVATION_MAIL_FROM:no-reply@fasswerk.local}
+
 

@@ -51,6 +51,22 @@ Das Script laedt alle Variablen aus `.env` und startet das Backend konsistent mi
 - `GET /actuator/health` is public
 - `GET /actuator/metrics/**` and `GET /actuator/prometheus` require `ADMIN`
 
+## OpenAPI / Swagger
+- OpenAPI JSON: `GET /v3/api-docs`
+- OpenAPI YAML: `GET /v3/api-docs.yaml`
+- Swagger UI: `GET /swagger-ui/index.html`
+
+Versionierte OpenAPI lokal exportieren:
+
+```bash
+./mvnw -q -DskipTests package
+VERSION=$(./mvnw -q help:evaluate -Dexpression=project.version -DforceStdout)
+java -jar target/backend-${VERSION}.jar > /tmp/backend.log 2>&1 &
+sleep 10
+curl -fsS http://127.0.0.1:8080/v3/api-docs.yaml -o ../docs/api/openapi-v${VERSION}.yaml
+pkill -f "backend-${VERSION}.jar" || true
+```
+
 ## Seed users
 - Admin: `admin@fasswerk.local` / `ChangeMe123!`
 - Staff: `staff@fasswerk.local` / `StaffPass123!`

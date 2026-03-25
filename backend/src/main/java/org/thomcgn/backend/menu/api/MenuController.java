@@ -1,5 +1,7 @@
 package org.thomcgn.backend.menu.api;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -18,6 +20,9 @@ import org.thomcgn.backend.menu.api.dto.DrinkRequest;
 import org.thomcgn.backend.menu.api.dto.DrinkResponse;
 import org.thomcgn.backend.menu.api.dto.DrinkVariantRequest;
 import org.thomcgn.backend.menu.api.dto.DrinkVariantResponse;
+import org.thomcgn.backend.menu.api.dto.VolumePriceRequest;
+import org.thomcgn.backend.menu.api.dto.VolumePriceResponse;
+import org.thomcgn.backend.menu.api.dto.VolumePriceUpdateRequest;
 import org.thomcgn.backend.menu.service.MenuService;
 
 import java.util.List;
@@ -25,74 +30,116 @@ import java.util.List;
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api")
+@Tag(name = "Menu", description = "Bar-Administration fuer Kategorien, Getraenke, Varianten und Volumenpreise")
 public class MenuController {
 
     private final MenuService menuService;
 
     @GetMapping("/drink-categories")
+    @Operation(summary = "Getraenkekategorien auflisten")
     public List<DrinkCategoryResponse> listCategories() {
         return menuService.listCategories();
     }
 
     @PostMapping("/drink-categories")
     @ResponseStatus(HttpStatus.CREATED)
+    @Operation(summary = "Getraenkekategorie anlegen")
     public DrinkCategoryResponse createCategory(@Valid @RequestBody DrinkCategoryRequest request) {
         return menuService.createCategory(request);
     }
 
     @PutMapping("/drink-categories/{id}")
+    @Operation(summary = "Getraenkekategorie aktualisieren")
     public DrinkCategoryResponse updateCategory(@PathVariable Long id, @Valid @RequestBody DrinkCategoryRequest request) {
         return menuService.updateCategory(id, request);
     }
 
     @DeleteMapping("/drink-categories/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Operation(summary = "Getraenkekategorie loeschen")
     public void deleteCategory(@PathVariable Long id) {
         menuService.deleteCategory(id);
     }
 
     @GetMapping("/drinks")
+    @Operation(summary = "Getraenke auflisten")
     public List<DrinkResponse> listDrinks() {
         return menuService.listDrinks();
     }
 
     @PostMapping("/drinks")
     @ResponseStatus(HttpStatus.CREATED)
+    @Operation(summary = "Getraenk anlegen")
     public DrinkResponse createDrink(@Valid @RequestBody DrinkRequest request) {
         return menuService.createDrink(request);
     }
 
     @PutMapping("/drinks/{id}")
+    @Operation(summary = "Getraenk aktualisieren")
     public DrinkResponse updateDrink(@PathVariable Long id, @Valid @RequestBody DrinkRequest request) {
         return menuService.updateDrink(id, request);
     }
 
     @DeleteMapping("/drinks/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Operation(summary = "Getraenk loeschen")
     public void deleteDrink(@PathVariable Long id) {
         menuService.deleteDrink(id);
     }
 
     @GetMapping("/drink-variants")
+    @Operation(summary = "Getraenkevarianten auflisten")
     public List<DrinkVariantResponse> listVariants() {
         return menuService.listVariants();
     }
 
     @PostMapping("/drink-variants")
     @ResponseStatus(HttpStatus.CREATED)
+    @Operation(summary = "Getraenkevariante anlegen")
     public DrinkVariantResponse createVariant(@Valid @RequestBody DrinkVariantRequest request) {
         return menuService.createVariant(request);
     }
 
     @PutMapping("/drink-variants/{id}")
+    @Operation(summary = "Getraenkevariante aktualisieren")
     public DrinkVariantResponse updateVariant(@PathVariable Long id, @Valid @RequestBody DrinkVariantRequest request) {
         return menuService.updateVariant(id, request);
     }
 
     @DeleteMapping("/drink-variants/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Operation(summary = "Getraenkevariante loeschen")
     public void deleteVariant(@PathVariable Long id) {
         menuService.deleteVariant(id);
+    }
+
+    @GetMapping("/volume-prices")
+    @Operation(summary = "Volumenpreise auflisten")
+    public List<VolumePriceResponse> listVolumePrices() {
+        return menuService.listVolumePrices();
+    }
+
+    @PostMapping("/volume-prices")
+    @ResponseStatus(HttpStatus.CREATED)
+    @Operation(summary = "Volumenpreis anlegen oder aktualisieren")
+    public VolumePriceResponse createVolumePrice(@Valid @RequestBody VolumePriceRequest request) {
+        return menuService.createOrUpdateVolumePrice(request);
+    }
+
+    @PutMapping("/volume-prices/{volumeMl}")
+    @Operation(summary = "Volumenpreis fuer eine ml-Groesse aktualisieren")
+    public VolumePriceResponse updateVolumePrice(
+            @PathVariable Integer volumeMl,
+            @Valid @RequestBody VolumePriceUpdateRequest request
+    ) {
+        return menuService.updateVolumePrice(volumeMl, request);
+    }
+
+    @DeleteMapping("/volume-prices/{volumeMl}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Operation(summary = "Volumenpreis fuer eine ml-Groesse loeschen")
+    public void deleteVolumePrice(@PathVariable Integer volumeMl) {
+        menuService.deleteVolumePrice(volumeMl);
     }
 }
 

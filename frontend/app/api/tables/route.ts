@@ -7,3 +7,14 @@ export async function GET() {
   return NextResponse.json(payload, { status: response.status });
 }
 
+export async function POST(request: Request) {
+  const body = await request.json().catch(() => ({}));
+  const response = await backendFetchWithAuth("/api/tables", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const payload = await response.json().catch(() => ({}));
+  return NextResponse.json(payload, { status: response.status });
+}
+

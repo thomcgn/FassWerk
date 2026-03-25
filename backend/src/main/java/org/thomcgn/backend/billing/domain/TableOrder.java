@@ -39,5 +39,8 @@ public class TableOrder extends BaseEntity {
 
     @Column
     private LocalDateTime closedAt;
+
+    @Column(nullable = false)
+    private boolean paid = true;
 }
 

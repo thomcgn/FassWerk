@@ -3,9 +3,14 @@ import { backendFetchWithAuth } from "@/lib/server-auth";
 
 type Params = { params: Promise<{ id: string }> };
 
-export async function POST(_: Request, { params }: Params) {
+export async function POST(request: Request, { params }: Params) {
   const { id } = await params;
-  const response = await backendFetchWithAuth(`/api/reservations/${id}/cancel`, { method: "POST" });
+  const body = await request.json().catch(() => ({}));
+  const response = await backendFetchWithAuth(`/api/reservations/${id}/cancel`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
   const payload = await response.json().catch(() => ({}));
   return NextResponse.json(payload, { status: response.status });
 }

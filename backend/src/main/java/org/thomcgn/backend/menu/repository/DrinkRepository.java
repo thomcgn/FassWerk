@@ -8,5 +8,7 @@ import java.util.List;
 public interface DrinkRepository extends JpaRepository<Drink, Long> {
 
     List<Drink> findAllByOrderByNameAsc();
+
+    List<Drink> findAllByActiveTrueOrderByNameAsc();
 }
 

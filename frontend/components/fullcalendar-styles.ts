@@ -1,0 +1,6 @@
+import "@fullcalendar/core/index.global.css";
+import "@fullcalendar/daygrid/index.global.css";
+import "@fullcalendar/timegrid/index.global.css";
+
+export {};
+

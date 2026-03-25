@@ -8,5 +8,7 @@ import java.util.List;
 public interface InventoryMovementRepository extends JpaRepository<InventoryMovement, Long> {
 
 	List<InventoryMovement> findAllByOrderByCreatedAtDesc();
+
+	long deleteByInventoryItemId(Long inventoryItemId);
 }
 

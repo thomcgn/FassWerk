@@ -39,14 +39,13 @@ public class TableService {
 
     private void apply(TableEntity table, TableRequest request) {
         table.setName(request.name().trim());
-        table.setCapacity(request.capacity());
         table.setArea(request.area());
         table.setStatus(request.status());
         table.setActive(request.active());
     }
 
     private TableResponse toResponse(TableEntity table) {
-        return new TableResponse(table.getId(), table.getName(), table.getCapacity(), table.getArea(), table.getStatus(), table.isActive());
+        return new TableResponse(table.getId(), table.getName(), table.getArea(), table.getStatus(), table.isActive());
     }
 }
 

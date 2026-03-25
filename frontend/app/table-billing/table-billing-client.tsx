@@ -1,105 +1,171 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRightLeft, Beer, Plus, Receipt, Trash2 } from "lucide-react";
+import { Receipt } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select } from "@/components/ui/select";
-import type { DrinkVariant, Table, TableOrder } from "@/types/api";
+import { TableDetailModal } from "@/components/table-detail-modal";
+import { useToastFeedback } from "@/lib/use-toast-feedback";
+import type { Drink, DrinkCategory, DrinkVariant, InventoryItem, SplitPaymentItemRequest, SplitPaymentResponse, Table, TableOrder } from "@/types/api";
 
 type LoadState = "loading" | "ready" | "error";
 
 function toCurrency(value: string): string {
   const amount = Number(value);
-  if (Number.isNaN(amount)) {
-    return `${value} EUR`;
-  }
+  if (Number.isNaN(amount)) return `${value} EUR`;
   return new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(amount);
+}
+
+function tableStatusVariant(status: Table["status"]): "success" | "warning" | "destructive" | "muted" {
+  if (status === "FREE") return "success";
+  if (status === "READY_FOR_PAYMENT") return "warning";
+  if (status === "RESERVED") return "muted";
+  return "destructive";
 }
 
 export default function TableBillingClient() {
   const router = useRouter();
   const [state, setState] = useState<LoadState>("loading");
   const [tables, setTables] = useState<Table[]>([]);
+  const [categories, setCategories] = useState<DrinkCategory[]>([]);
+  const [drinks, setDrinks] = useState<Drink[]>([]);
   const [variants, setVariants] = useState<DrinkVariant[]>([]);
   const [order, setOrder] = useState<TableOrder | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const [orderLookupId, setOrderLookupId] = useState("");
+  const [selectedTableId, setSelectedTableId] = useState("");
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [newTableName, setNewTableName] = useState("");
+  const [newTableArea, setNewTableArea] = useState("INSIDE");
+  const [creatingTable, setCreatingTable] = useState(false);
 
-  const [tableId, setTableId] = useState<string>("");
-  const [reservationId, setReservationId] = useState<string>("");
-  const [orderLookupId, setOrderLookupId] = useState<string>("");
-  const [variantId, setVariantId] = useState<string>("");
-  const [quantity, setQuantity] = useState<string>("1");
+  useToastFeedback(error, "error");
+  useToastFeedback(status, "success");
+
+  const sellableVariants = useCallback((allVariants: DrinkVariant[], allInventoryItems: InventoryItem[]) => {
+    const activeItemsWithStock = allInventoryItems.filter((item) => item.active && Number(item.totalStockAmount) > 0);
+    const variantIdsWithStock = new Set<number>();
+    const drinkLinkCounts = new Map<number, number>();
+
+    for (const item of activeItemsWithStock) {
+      if (item.linkedDrinkVariantId != null) {
+        variantIdsWithStock.add(item.linkedDrinkVariantId);
+      }
+      if (item.linkedDrinkId != null) {
+        drinkLinkCounts.set(item.linkedDrinkId, (drinkLinkCounts.get(item.linkedDrinkId) ?? 0) + 1);
+      }
+    }
+
+    const fallbackDrinkIds = new Set(
+      Array.from(drinkLinkCounts.entries())
+        .filter(([, count]) => count === 1)
+        .map(([drinkId]) => drinkId),
+    );
+
+    return allVariants.filter((variant) => variant.active && (variantIdsWithStock.has(variant.id) || fallbackDrinkIds.has(variant.drinkId)));
+  }, []);
 
   const loadMeta = useCallback(async () => {
     try {
-      const [tablesResponse, variantsResponse] = await Promise.all([
+      const [tablesResponse, categoriesResponse, drinksResponse, variantsResponse, inventoryResponse] = await Promise.all([
         fetch("/api/tables", { cache: "no-store" }),
+        fetch("/api/drink-categories", { cache: "no-store" }),
+        fetch("/api/drinks", { cache: "no-store" }),
         fetch("/api/drink-variants", { cache: "no-store" }),
+        fetch("/api/inventory", { cache: "no-store" }),
       ]);
 
-      if ([tablesResponse.status, variantsResponse.status].some((code) => code === 401 || code === 403)) {
+      if ([tablesResponse.status, categoriesResponse.status, drinksResponse.status, variantsResponse.status, inventoryResponse.status].some((code) => code === 401 || code === 403)) {
         router.replace("/login");
         return;
       }
 
-      if (!tablesResponse.ok || !variantsResponse.ok) {
-        setError("Stammdaten fuer Tischabrechnung konnten nicht geladen werden.");
+      if (!tablesResponse.ok || !categoriesResponse.ok || !drinksResponse.ok || !variantsResponse.ok || !inventoryResponse.ok) {
+        setError("Stammdaten für Tischabrechnung konnten nicht geladen werden.");
         setState("error");
         return;
       }
 
-      const [tablesPayload, variantsPayload] = (await Promise.all([
+      const [tablesPayload, categoriesPayload, drinksPayload, variantsPayload, inventoryPayload] = (await Promise.all([
         tablesResponse.json(),
+        categoriesResponse.json(),
+        drinksResponse.json(),
         variantsResponse.json(),
-      ])) as [Table[], DrinkVariant[]];
+        inventoryResponse.json(),
+      ])) as [Table[], DrinkCategory[], Drink[], DrinkVariant[], InventoryItem[]];
+
+      const sellable = sellableVariants(variantsPayload, inventoryPayload);
+      const sellableDrinkIds = new Set(sellable.map((variant) => variant.drinkId));
+      const sellableCategoryIds = new Set(
+        drinksPayload
+          .filter((drink) => sellableDrinkIds.has(drink.id))
+          .map((drink) => drink.categoryId),
+      );
 
       setTables(tablesPayload.filter((table) => table.active));
-      setVariants(variantsPayload.filter((variant) => variant.active));
-      setTableId((current) => current || String(tablesPayload[0]?.id ?? ""));
-      setVariantId((current) => current || String(variantsPayload[0]?.id ?? ""));
+      setVariants(sellable);
+      setDrinks(drinksPayload.filter((drink) => drink.active && sellableDrinkIds.has(drink.id)));
+      setCategories(categoriesPayload.filter((category) => category.active && sellableCategoryIds.has(category.id)));
       setState("ready");
     } catch {
       setError("Unerwarteter Fehler beim Laden der Stammdaten.");
       setState("error");
     }
-  }, [router]);
+  }, [router, sellableVariants]);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      void loadMeta();
-    }, 0);
+    const timer = window.setTimeout(() => void loadMeta(), 0);
     return () => window.clearTimeout(timer);
   }, [loadMeta]);
 
-  async function openOrder() {
+  async function openOrLoadTable(table: Table) {
     setError(null);
-    const response = await fetch("/api/table-orders/open", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        tableId: Number(tableId),
-        reservationId: reservationId.trim() ? Number(reservationId) : null,
-      }),
-    });
+    setStatus(null);
+    setSelectedTableId(String(table.id));
 
-    if (!response.ok) {
-      setError("Tischbon konnte nicht geoeffnet werden.");
+    const openResponse = await fetch(`/api/table-orders/open/table/${table.id}`, { cache: "no-store" });
+    if (openResponse.ok) {
+      const payload = (await openResponse.json()) as TableOrder;
+      setOrder(payload);
+      setOrderLookupId(String(payload.id));
+      setIsModalOpen(true);
+      setStatus(`Tisch ${table.name} geladen.`);
       return;
     }
 
-    const payload = (await response.json()) as TableOrder;
+    if (openResponse.status !== 404) {
+      const payload = (await openResponse.json().catch(() => ({}))) as { message?: string };
+      setError(payload.message ?? "Tisch konnte nicht geladen werden.");
+      return;
+    }
+
+    const createResponse = await fetch("/api/table-orders/open", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tableId: table.id, reservationId: null }),
+    });
+
+    if (!createResponse.ok) {
+      const payload = (await createResponse.json().catch(() => ({}))) as { message?: string };
+      setError(payload.message ?? "Tisch konnte nicht geöffnet werden.");
+      return;
+    }
+
+    const payload = (await createResponse.json()) as TableOrder;
     setOrder(payload);
     setOrderLookupId(String(payload.id));
+    setIsModalOpen(true);
+    setStatus(`Tisch ${table.name} geöffnet.`);
   }
 
   async function fetchOrderById(id: string) {
     if (!id.trim()) return;
     setError(null);
+    setStatus(null);
     const response = await fetch(`/api/table-orders/${id}`, { cache: "no-store" });
     if (!response.ok) {
       setError("Tischbon wurde nicht gefunden.");
@@ -107,45 +173,48 @@ export default function TableBillingClient() {
     }
     const payload = (await response.json()) as TableOrder;
     setOrder(payload);
+    setSelectedTableId(String(payload.tableId));
+    setIsModalOpen(true);
+    setStatus(`Bon #${payload.id} geladen.`);
   }
 
-  async function addItem() {
+  async function addItem(drinkVariantId: number, quantity: number) {
     if (!order) return;
     setError(null);
+    setStatus(null);
     const response = await fetch(`/api/table-orders/${order.id}/items`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ drinkVariantId: Number(variantId), quantity: Number(quantity) }),
+      body: JSON.stringify({ drinkVariantId, quantity }),
     });
-
     if (!response.ok) {
-      setError("Position konnte nicht hinzugefuegt werden.");
+      const payload = (await response.json().catch(() => ({}))) as { message?: string };
+      setError(payload.message ?? "Position konnte nicht hinzugefügt werden.");
       return;
     }
-
     const payload = (await response.json()) as TableOrder;
     setOrder(payload);
+    setStatus(`${quantity}x Position hinzugefügt.`);
   }
 
   async function removeItem(itemId: number) {
     if (!order) return;
     setError(null);
-    const response = await fetch(`/api/table-orders/${order.id}/items/${itemId}`, {
-      method: "DELETE",
-    });
-
+    setStatus(null);
+    const response = await fetch(`/api/table-orders/${order.id}/items/${itemId}`, { method: "DELETE" });
     if (!response.ok) {
       setError("Position konnte nicht entfernt werden.");
       return;
     }
-
     const payload = (await response.json()) as TableOrder;
     setOrder(payload);
+    setStatus("Position entfernt.");
   }
 
   async function closeOrder() {
     if (!order) return;
     setError(null);
+    setStatus(null);
     const response = await fetch(`/api/table-orders/${order.id}/close`, { method: "POST" });
     if (!response.ok) {
       setError("Bon konnte nicht geschlossen werden.");
@@ -153,21 +222,94 @@ export default function TableBillingClient() {
     }
     const payload = (await response.json()) as TableOrder;
     setOrder(payload);
+    setStatus(`Bon #${payload.id} abgeschlossen. Betrag ${toCurrency(payload.total)} wurde in die Umsatzauswertung übernommen.`);
+    setIsModalOpen(false);
+    await loadMeta();
   }
 
-  const canEditOrder = useMemo(() => order?.status === "OPEN", [order]);
+  async function splitPayment(items: SplitPaymentItemRequest[]) {
+    if (!order) return;
+    if (items.length === 0) {
+      setError("Bitte mindestens eine Position für die Teilzahlung auswählen.");
+      return;
+    }
+
+    setError(null);
+    setStatus(null);
+    const response = await fetch(`/api/table-orders/${order.id}/split-payment`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ items }),
+    });
+
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => ({}))) as { message?: string };
+      setError(payload.message ?? "Teilzahlung konnte nicht durchgeführt werden.");
+      return;
+    }
+
+    const payload = (await response.json()) as SplitPaymentResponse;
+    setOrder(payload.openOrder);
+    setStatus(`Teilzahlung als Bon #${payload.paidOrder.id} erfasst: ${toCurrency(payload.paidOrder.total)}.`);
+
+    if (payload.openOrder.status !== "OPEN") {
+      setIsModalOpen(false);
+      await loadMeta();
+    }
+  }
+
+  async function createTable() {
+    if (!newTableName.trim()) {
+      setError("Bitte einen Tischnamen eingeben.");
+      return;
+    }
+    setError(null);
+    setStatus(null);
+    setCreatingTable(true);
+
+    const response = await fetch("/api/tables", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: newTableName.trim(),
+        area: newTableArea,
+        status: "FREE",
+        active: true,
+      }),
+    });
+
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => ({}))) as { message?: string; error?: string };
+      setError(payload.message || payload.error || "Tisch konnte nicht angelegt werden.");
+      setCreatingTable(false);
+      return;
+    }
+
+    const payload = (await response.json()) as Table;
+    setNewTableName("");
+    setNewTableArea("INSIDE");
+    setStatus(`Tisch ${payload.name} wurde angelegt.`);
+    await loadMeta();
+    setCreatingTable(false);
+  }
+
 
   if (state === "loading") {
-    return <main className="p-4 md:p-6">Lade Tischabrechnung...</main>;
+    return (
+      <main className="p-4 text-sm text-[color:var(--color-muted-foreground)] flex items-center gap-2">
+        <div className="h-5 w-5 rounded-full border-2 border-cyan-500 border-r-transparent animate-spin"></div>
+        Lade Tischabrechnung...
+      </main>
+    );
   }
 
   if (state === "error") {
     return (
-      <main className="mx-auto w-full max-w-3xl p-4 md:p-6">
-        <Card className="border-red-200 bg-red-50">
+      <main className="w-full p-4 md:p-6">
+        <Card className="border-red-500/40 bg-red-500/10">
           <CardHeader>
-            <CardTitle className="text-red-700">Fehler</CardTitle>
-            <CardDescription className="text-red-700">{error}</CardDescription>
+            <CardTitle className="text-red-300">Fehler</CardTitle>
+            <CardDescription className="text-red-300/70">{error}</CardDescription>
           </CardHeader>
           <CardContent>
             <Button variant="outline" onClick={() => void loadMeta()}>Neu laden</Button>
@@ -178,150 +320,112 @@ export default function TableBillingClient() {
   }
 
   return (
-    <main className="mx-auto w-full max-w-7xl p-3 sm:p-4 md:p-6">
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-zinc-900 sm:text-3xl">Tischabrechnung</h1>
-          <p className="text-sm text-zinc-600">Touch-freundlich fuer iPhone 12 mini und iPad 10.5.</p>
-        </div>
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-[340px_1fr]">
-        <div className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="inline-flex items-center gap-2"><Receipt className="h-4 w-4" />Bon oeffnen</CardTitle>
-              <CardDescription>Neuen Bon fuer Tisch starten.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="space-y-1">
-                <Label htmlFor="tableId">Tisch</Label>
-                <Select id="tableId" value={tableId} onChange={(event) => setTableId(event.target.value)}>
-                  {tables.map((table) => (
-                    <option key={table.id} value={String(table.id)}>
-                      {table.name} ({table.capacity} Pers.)
-                    </option>
-                  ))}
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="reservationId">Reservierung-ID (optional)</Label>
-                <Input
-                  id="reservationId"
-                  value={reservationId}
-                  onChange={(event) => setReservationId(event.target.value)}
-                  placeholder="z. B. 42"
-                />
-              </div>
-              <Button onClick={() => void openOrder()} className="w-full" disabled={!tableId}>
-                <ArrowRightLeft className="h-4 w-4" />Bon starten
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Bon laden</CardTitle>
-              <CardDescription>Bereits geoeffneten Bon per ID holen.</CardDescription>
-            </CardHeader>
-            <CardContent className="flex gap-2">
-              <Input
-                value={orderLookupId}
-                onChange={(event) => setOrderLookupId(event.target.value)}
-                placeholder="Order ID"
-              />
-              <Button variant="secondary" onClick={() => void fetchOrderById(orderLookupId)}>
-                Laden
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
+    <main className="dashboard-grid animate-in fade-in duration-500">
+      <section className="grid gap-5 md:grid-cols-[0.95fr_1.05fr]">
+        <Card className="border-cyan-500/30 bg-gradient-to-br from-cyan-500/10 to-transparent">
+          <CardContent className="p-6">
+            <p className="text-xs uppercase tracking-[0.2em] font-semibold text-cyan-400">Floor Ops</p>
+            <h1 className="mt-3 text-3xl font-bold tracking-tight">Tischabrechnung für dein Team.</h1>
+            <p className="mt-3 text-sm leading-6 text-[color:var(--color-muted-foreground)]">
+              Offene Tische antippen, direkt ins Tischdetail springen und Bestellungen per Tap erfassen.
+            </p>
+            <div className="mt-6 grid gap-3 sm:grid-cols-3">
+              {[
+                { label: "Tische", value: tables.length },
+                { label: "Kategorien", value: categories.length },
+                { label: "Bon", value: order ? `#${order.id}` : "—" },
+              ].map((item) => (
+                <div key={item.label} className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 p-4">
+                  <p className="text-xs uppercase tracking-[0.2em] font-semibold text-cyan-400">{item.label}</p>
+                  <p className="mt-2 text-2xl font-bold">{item.value}</p>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
 
         <Card>
           <CardHeader>
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <CardTitle>Aktueller Bon</CardTitle>
-                <CardDescription>
-                  {order ? `Tisch ${order.tableName} · #${order.id}` : "Noch kein Bon ausgewaehlt"}
-                </CardDescription>
-              </div>
-              {order ? (
-                <Badge variant={order.status === "OPEN" ? "warning" : "success"}>{order.status}</Badge>
-              ) : null}
-            </div>
+            <CardTitle className="inline-flex items-center gap-2"><Receipt className="h-4 w-4" />Bon laden</CardTitle>
+            <CardDescription>Direkter Zugriff auf offene oder geschlossene Bons via ID.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            {order ? (
-              <>
-                <div className="grid gap-2 sm:grid-cols-[1fr_110px_140px]">
-                  <Select value={variantId} onChange={(event) => setVariantId(event.target.value)} disabled={!canEditOrder}>
-                    {variants.map((variant) => (
-                      <option key={variant.id} value={String(variant.id)}>
-                        {variant.drinkName} · {variant.displayVolumeName} ({toCurrency(variant.price)})
-                      </option>
-                    ))}
-                  </Select>
-                  <Input
-                    type="number"
-                    min={1}
-                    value={quantity}
-                    onChange={(event) => setQuantity(event.target.value)}
-                    disabled={!canEditOrder}
-                  />
-                  <Button onClick={() => void addItem()} disabled={!canEditOrder || !variantId}>
-                    <Plus className="h-4 w-4" />Hinzufuegen
-                  </Button>
-                </div>
-
-                <div className="space-y-2">
-                  {order.items.length === 0 ? (
-                    <p className="rounded-md border border-zinc-200 p-3 text-sm text-zinc-600">Keine Positionen auf dem Bon.</p>
-                  ) : (
-                    order.items.map((item) => (
-                      <div key={item.id} className="rounded-lg border border-zinc-200 p-3">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <p className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-900">
-                            <Beer className="h-4 w-4 text-zinc-500" />
-                            {item.drinkLabel}
-                          </p>
-                          <p className="text-sm font-semibold">{toCurrency(item.totalPrice)}</p>
-                        </div>
-                        <p className="mt-1 text-xs text-zinc-600">
-                          {item.quantity} x {toCurrency(item.unitPrice)} · Verbrauch {item.deductedVolumeMl} ml
-                        </p>
-                        <div className="mt-2">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            disabled={!canEditOrder}
-                            onClick={() => void removeItem(item.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />Entfernen
-                          </Button>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-
-                <div className="flex flex-col gap-2 rounded-md bg-zinc-50 p-3 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="text-base font-semibold">Gesamt: {toCurrency(order.total)}</p>
-                  <Button onClick={() => void closeOrder()} disabled={!canEditOrder}>
-                    Bon schliessen
-                  </Button>
-                </div>
-              </>
-            ) : (
-              <p className="rounded-md border border-zinc-200 p-3 text-sm text-zinc-600">
-                Oeffne einen Bon oder lade eine Order-ID, um Positionen zu verwalten.
-              </p>
-            )}
-
-            {error ? <p className="text-sm text-red-600">{error}</p> : null}
+          <CardContent className="grid gap-2 md:grid-cols-[1fr_auto]">
+            <Input value={orderLookupId} onChange={(event) => setOrderLookupId(event.target.value)} placeholder="Order ID" />
+            <Button className="md:min-w-32" variant="outline" onClick={() => void fetchOrderById(orderLookupId)}>Laden</Button>
           </CardContent>
         </Card>
-      </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Neuen Tisch anlegen</CardTitle>
+            <CardDescription>Erzeuge eigene Tische/Deckel für Laufkundschaft und freie Plätze.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3 sm:grid-cols-2">
+            <Input
+              value={newTableName}
+              onChange={(event) => setNewTableName(event.target.value)}
+              placeholder="z. B. Terrasse-5"
+              className="h-12"
+            />
+            <select
+              value={newTableArea}
+              onChange={(event) => setNewTableArea(event.target.value)}
+              className="h-12 w-full rounded-lg border border-[color:var(--color-border-strong)] bg-[color:var(--color-surface)]/75 px-4 text-sm"
+            >
+              <option value="INSIDE">INSIDE</option>
+              <option value="OUTSIDE">OUTSIDE</option>
+              <option value="BAR">BAR</option>
+            </select>
+            <Button onClick={() => void createTable()} disabled={creatingTable || !newTableName.trim()} className="sm:col-span-2">
+              {creatingTable ? "Lege an..." : "Tisch anlegen"}
+            </Button>
+          </CardContent>
+        </Card>
+      </section>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Offene Tische</CardTitle>
+          <CardDescription>Tippe/Klicke auf einen Tisch, um ihn zu öffnen oder den aktiven Bon zu laden.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+          {tables.map((table) => (
+            <button
+              key={table.id}
+              type="button"
+              onClick={() => void openOrLoadTable(table)}
+              className={`min-h-28 rounded-xl border p-4 text-left transition-all active:scale-[0.99] ${selectedTableId === String(table.id)
+                ? "border-cyan-500/60 bg-cyan-500/15"
+                : "border-cyan-500/20 bg-cyan-500/5 hover:border-cyan-500/40 hover:bg-cyan-500/10"}`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="text-lg font-semibold text-[color:var(--color-foreground)]">{table.name}</p>
+                  <p className="text-xs text-[color:var(--color-muted-foreground)]">{table.area ?? "BEREICH OFFEN"}</p>
+                </div>
+                <Badge variant={tableStatusVariant(table.status)}>{table.status}</Badge>
+              </div>
+            </button>
+          ))}
+        </CardContent>
+      </Card>
+
+      <TableDetailModal
+        isOpen={isModalOpen}
+        order={order}
+        categories={categories}
+        drinks={drinks}
+        variants={variants}
+        onClose={() => setIsModalOpen(false)}
+        onAddItem={addItem}
+        onRemoveItem={removeItem}
+        onCloseOrder={closeOrder}
+        onSplitPayment={splitPayment}
+        error={error}
+        status={status}
+      />
+
+      {error && !isModalOpen ? <p className="w-full rounded-2xl bg-red-500/15 border border-red-500/30 px-4 py-3 text-sm text-red-100">{error}</p> : null}
     </main>
   );
 }

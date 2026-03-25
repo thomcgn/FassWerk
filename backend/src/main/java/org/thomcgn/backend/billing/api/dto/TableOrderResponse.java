@@ -12,6 +12,7 @@ public record TableOrderResponse(
         String tableName,
         Long reservationId,
         TableOrderStatus status,
+        boolean paid,
         LocalDateTime openedAt,
         LocalDateTime closedAt,
         BigDecimal total,

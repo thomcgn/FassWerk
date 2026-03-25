@@ -3,20 +3,23 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 rounded-md text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/50",
+  "inline-flex max-w-full min-w-0 items-center justify-center gap-2 overflow-hidden rounded-lg text-sm font-semibold transition-all disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[color:var(--ring)] [&_span]:max-w-full [&_span]:truncate",
   {
     variants: {
       variant: {
-        default: "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-500/30 hover:from-indigo-500 hover:to-violet-500",
-        secondary: "bg-indigo-50 text-indigo-700 hover:bg-indigo-100",
-        outline: "border border-indigo-200 bg-white/90 text-indigo-700 hover:bg-indigo-50",
-        ghost: "text-slate-700 hover:bg-indigo-50",
-        destructive: "bg-gradient-to-r from-rose-600 to-red-600 text-white hover:from-rose-500 hover:to-red-500",
+        default:
+          "bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-lg shadow-cyan-500/30 hover:shadow-cyan-500/50",
+        secondary:
+          "border border-cyan-400/60 bg-cyan-500/20 text-cyan-100 hover:bg-cyan-500/30 hover:border-cyan-300/80",
+        outline:
+          "border border-[color:var(--color-border-strong)] bg-[color:var(--color-surface)]/65 text-[color:var(--color-foreground)] hover:bg-[color:var(--color-surface-muted)] hover:border-cyan-500/45",
+        ghost: "text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-white/10",
+        destructive: "bg-red-600 text-white hover:bg-red-700 shadow-lg shadow-red-600/30",
       },
       size: {
         default: "h-10 px-4 py-2",
-        sm: "h-9 px-3 py-1.5",
-        lg: "h-11 px-6 py-3",
+        sm: "h-9 px-3 py-1.5 rounded-md text-xs",
+        lg: "h-12 px-6 py-3 text-base rounded-lg",
         icon: "h-10 w-10",
       },
     },
@@ -37,4 +40,3 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   },
 );
 Button.displayName = "Button";
-

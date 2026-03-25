@@ -45,6 +45,7 @@ public class ReservationService {
     private final TableRepository tableRepository;
     private final QrCodeService qrCodeService;
     private final QrProperties qrProperties;
+    private final ReservationMailService reservationMailService;
 
     @Transactional
     public Reservation createReservation(CreateReservationRequest request) {
@@ -59,7 +60,7 @@ public class ReservationService {
         reservation.setReservationDate(request.reservationDate());
         reservation.setReservationTime(request.reservationTime());
         reservation.setGuestCount(request.guestCount());
-        reservation.setStatus(ReservationStatus.CONFIRMED);
+        reservation.setStatus(ReservationStatus.PENDING);
         reservation.setQrCodeToken(generateToken());
         reservation.setExpiresAt(LocalDateTime.of(request.reservationDate(), request.reservationTime())
                 .plusMinutes(slotConfig.getNoShowGracePeriodMinutes()));
@@ -105,13 +106,28 @@ public class ReservationService {
     }
 
     @Transactional
-    public Reservation cancel(Long reservationId) {
+    public Reservation confirm(Long reservationId) {
+        Reservation reservation = getById(reservationId);
+        if (reservation.getStatus() != ReservationStatus.PENDING) {
+            throw new ConflictException("Only pending reservations can be confirmed");
+        }
+
+        reservation.setStatus(ReservationStatus.CONFIRMED);
+        Reservation saved = reservationRepository.save(reservation);
+        reservationMailService.sendConfirmedMail(saved);
+        return saved;
+    }
+
+    @Transactional
+    public Reservation cancel(Long reservationId, String reason) {
         Reservation reservation = getById(reservationId);
         if (reservation.getStatus() == ReservationStatus.CHECKED_IN || reservation.getStatus() == ReservationStatus.COMPLETED) {
-            throw new ConflictException("Checked-in or completed reservations cannot be cancelled");
+            throw new ConflictException("Checked-in or completed reservations cannot be rejected");
         }
-        reservation.setStatus(ReservationStatus.CANCELLED);
-        return reservationRepository.save(reservation);
+        reservation.setStatus(ReservationStatus.REJECTED);
+        Reservation saved = reservationRepository.save(reservation);
+        reservationMailService.sendRejectedMail(saved, reason);
+        return saved;
     }
 
     @Transactional(readOnly = true)
@@ -148,19 +164,19 @@ public class ReservationService {
 
     private boolean isCheckInAllowed(Reservation reservation) {
         return reservation.getReservationDate().isEqual(LocalDate.now())
-                && (reservation.getStatus() == ReservationStatus.CONFIRMED || reservation.getStatus() == ReservationStatus.PENDING)
+                && reservation.getStatus() == ReservationStatus.CONFIRMED
                 && reservation.getCheckedInAt() == null;
     }
 
     private void validateCapacity(LocalDate date, LocalTime time, int guestCount) {
-        long totalCapacity = tableRepository.getTotalActiveCapacity();
-        if (totalCapacity <= 0) {
+        long totalActiveTables = tableRepository.getTotalActiveTables();
+        if (totalActiveTables <= 0) {
             throw new ConflictException("No active tables configured");
         }
 
-        long occupied = reservationRepository.getGuestCountForSlot(date, time, ACTIVE_SLOT_STATUSES);
-        if (occupied + guestCount > totalCapacity) {
-            throw new ConflictException("No capacity available for this slot");
+        long occupiedTables = reservationRepository.getReservationCountForSlot(date, time, ACTIVE_SLOT_STATUSES);
+        if (occupiedTables >= totalActiveTables) {
+            throw new ConflictException("No free tables available for this slot");
         }
     }
 

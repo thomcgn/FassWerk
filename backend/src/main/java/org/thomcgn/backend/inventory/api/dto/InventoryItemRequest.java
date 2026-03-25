@@ -18,7 +18,10 @@ public record InventoryItemRequest(
         @NotNull ContentUnit contentUnit,
         @NotNull @DecimalMin("0.00") BigDecimal reorderThreshold,
         @NotNull @DecimalMin("0.00") BigDecimal minimumStock,
-        @NotNull @DecimalMin("0.00") BigDecimal recommendedReorderAmount,
+        @DecimalMin("0.00") BigDecimal recommendedReorderAmount,
+        @DecimalMin("0.00") BigDecimal reorderThresholdPackages,
+        @DecimalMin("0.00") BigDecimal minimumStockPackages,
+        @DecimalMin("0.00") BigDecimal recommendedReorderPackages,
         String supplier,
         @NotNull Boolean active
 ) {

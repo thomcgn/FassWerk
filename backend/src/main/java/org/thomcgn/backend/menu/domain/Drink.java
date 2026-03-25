@@ -1,14 +1,18 @@
 package org.thomcgn.backend.menu.domain;
 
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
 import org.thomcgn.backend.common.domain.BaseEntity;
+
+import java.util.List;
 
 @Getter
 @Setter
@@ -31,5 +35,8 @@ public class Drink extends BaseEntity {
 
     @Column(nullable = false)
     private boolean active;
+
+    @OneToMany(mappedBy = "drink", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<DrinkVariant> variants;
 }
 

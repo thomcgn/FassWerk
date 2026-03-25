@@ -11,7 +11,8 @@ public record DrinkVariantRequest(
         @NotNull Long drinkId,
         @NotBlank String displayVolumeName,
         @NotNull @Min(1) Integer volumeMl,
-        @NotNull @DecimalMin("0.00") BigDecimal price,
+        @DecimalMin("0.00") BigDecimal price,
+        Boolean useStandardPrice,
         String sku,
         @NotNull Boolean active
 ) {

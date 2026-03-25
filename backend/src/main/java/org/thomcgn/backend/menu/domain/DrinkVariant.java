@@ -31,6 +31,9 @@ public class DrinkVariant extends BaseEntity {
     @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal price;
 
+    @Column(name = "use_volume_standard_price", nullable = false)
+    private boolean useVolumeStandardPrice = true;
+
     @Column
     private String sku;
 

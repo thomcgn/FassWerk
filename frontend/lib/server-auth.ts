@@ -3,7 +3,6 @@ import { BACKEND_BASE_URL } from "@/lib/config";
 import {
   ACCESS_TOKEN_COOKIE,
   COOKIE_MAX_AGE_ACCESS_SECONDS,
-  COOKIE_MAX_AGE_REFRESH_SECONDS,
   REFRESH_TOKEN_COOKIE,
 } from "@/lib/auth-cookies";
 import type { LoginResponse, SessionResponse } from "@/types/api";
@@ -26,7 +25,6 @@ async function applyTokenCookies(payload: LoginResponse) {
     sameSite: "lax",
     secure: isProd,
     path: "/",
-    maxAge: payload.refreshExpiresInSeconds || COOKIE_MAX_AGE_REFRESH_SECONDS,
   });
 }
 

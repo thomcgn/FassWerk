@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AppNav } from "@/components/navigation/app-nav";
+import { AppToaster } from "@/components/ui/app-toaster";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -14,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "FassWerk Frontend",
-  description: "Staff UI fuer Login, Inventory, Buchungssystem und Tischabrechnung",
+  title: "FassWerk",
+  description: "Reservierungen, Warenwirtschaft und Tischabrechnung für moderne Gastro-Teams.",
 };
 
 export default function RootLayout({
@@ -26,11 +27,14 @@ export default function RootLayout({
   return (
     <html
       lang="de"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased scroll-smooth dark`}
     >
-      <body className="min-h-full bg-zinc-50 text-zinc-900">
+      <body className="min-h-full bg-background text-foreground">
         <AppNav />
-        <main className="mx-auto w-full max-w-7xl flex-1 pb-mobile-nav md:pb-0">{children}</main>
+        <AppToaster />
+        <main className="w-full flex-1 px-3 pb-mobile-nav pt-5 sm:px-4 md:px-8 lg:px-10 xl:px-12 md:pb-8 md:pt-7">
+          {children}
+        </main>
       </body>
     </html>
   );

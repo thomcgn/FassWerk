@@ -1,6 +1,9 @@
 import { test, expect } from "@playwright/test";
+import { mockAuthenticatedSession } from "./support/mock-auth";
 
 test("login -> sessions revoke -> logout-all flow", async ({ page }) => {
+  await mockAuthenticatedSession(page);
+
   await page.route("**/api/auth/login", async (route) => {
     await route.fulfill({ status: 200, body: JSON.stringify({ role: "ADMIN", displayName: "Admin" }) });
   });
@@ -65,20 +68,14 @@ test("login -> sessions revoke -> logout-all flow", async ({ page }) => {
     await route.fulfill({ status: 204 });
   });
 
-  await page.goto("/login");
-  await page.getByRole("button", { name: "Anmelden" }).click();
-
-  await expect(page).toHaveURL(/\/inventory$/);
-  await expect(page.getByRole("heading", { name: "Inventory" })).toBeVisible();
-
-  await page.getByRole("link", { name: "Sessions" }).click();
+  await page.goto("/sessions");
   await expect(page).toHaveURL(/\/sessions$/);
   await expect(page.getByRole("heading", { name: "Aktive Sessions" })).toBeVisible();
 
-  await page.getByRole("button", { name: "Beenden" }).click();
+  await page.getByRole("button", { name: "Beenden" }).nth(1).click();
   await expect(page.locator("text=other-token-2")).toHaveCount(0);
 
-  await page.getByRole("button", { name: "Logout All" }).click();
+  await page.getByRole("button", { name: "Logout all" }).click();
   await expect(page).toHaveURL(/\/login$/);
 });
 

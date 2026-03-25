@@ -13,6 +13,12 @@ public interface InventoryItemRepository extends JpaRepository<InventoryItem, Lo
 
     Optional<InventoryItem> findFirstByLinkedDrinkIdAndActiveTrue(Long linkedDrinkId);
 
+    List<InventoryItem> findAllByLinkedDrinkVariantId(Long linkedDrinkVariantId);
+
+    List<InventoryItem> findAllByLinkedDrinkId(Long linkedDrinkId);
+
+    List<InventoryItem> findAllByLinkedDrinkIdAndActiveTrue(Long linkedDrinkId);
+
     List<InventoryItem> findAllByOrderByNameAsc();
 
     @Query("""
@@ -23,5 +29,6 @@ public interface InventoryItemRepository extends JpaRepository<InventoryItem, Lo
             order by i.totalStockAmount asc
             """)
     List<InventoryItem> findCriticalForReorder();
-}
 
+    List<InventoryItem> findByActiveTrue();
+}

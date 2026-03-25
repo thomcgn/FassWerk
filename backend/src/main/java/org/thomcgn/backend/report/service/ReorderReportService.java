@@ -22,8 +22,11 @@ public class ReorderReportService {
 
     private final InventoryService inventoryService;
 
-    public byte[] generateReorderPdf() {
-        List<ReorderSuggestionResponse> suggestions = inventoryService.getReorderSuggestions();
+    public byte[] generateReorderPdf(String supplier) {
+        String normalizedSupplier = normalizeSupplier(supplier);
+        List<ReorderSuggestionResponse> suggestions = inventoryService.getReorderSuggestions().stream()
+                .filter(item -> normalizedSupplier == null || normalizedSupplier.equalsIgnoreCase(normalizeSupplier(item.supplier())))
+                .toList();
 
         try (PDDocument document = new PDDocument(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
             PDPage page = new PDPage(PDRectangle.A4);
@@ -35,8 +38,11 @@ public class ReorderReportService {
 
                 content.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA), 10);
                 writeLine(content, 50, 772, "Datum: " + LocalDate.now());
+                if (normalizedSupplier != null) {
+                    writeLine(content, 50, 758, "Lieferant: " + normalizedSupplier);
+                }
 
-                float y = 748;
+                float y = normalizedSupplier != null ? 734 : 748;
                 content.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD), 10);
                 writeLine(content, 50, y, "Artikel | Bestand | Schwelle | Empfehlung | Gebinde | Lieferant");
                 y -= 14;
@@ -74,6 +80,14 @@ public class ReorderReportService {
         content.newLineAtOffset(x, y);
         content.showText(text);
         content.endText();
+    }
+
+    private String normalizeSupplier(String supplier) {
+        if (supplier == null) {
+            return null;
+        }
+        String normalized = supplier.trim();
+        return normalized.isEmpty() ? null : normalized;
     }
 }
 

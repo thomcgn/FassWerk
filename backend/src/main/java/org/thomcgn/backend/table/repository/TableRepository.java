@@ -6,7 +6,7 @@ import org.thomcgn.backend.table.domain.TableEntity;
 
 public interface TableRepository extends JpaRepository<TableEntity, Long> {
 
-    @Query("select coalesce(sum(t.capacity), 0) from TableEntity t where t.active = true")
-    long getTotalActiveCapacity();
+    @Query("select count(t) from TableEntity t where t.active = true")
+    long getTotalActiveTables();
 }
 

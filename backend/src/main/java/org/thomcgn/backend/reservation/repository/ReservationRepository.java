@@ -17,13 +17,13 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
     Optional<Reservation> findByQrCodeToken(String qrCodeToken);
 
     @Query("""
-            select coalesce(sum(r.guestCount), 0)
+            select count(r)
             from Reservation r
             where r.reservationDate = :date
               and r.reservationTime = :time
               and r.status in :statuses
             """)
-    long getGuestCountForSlot(
+    long getReservationCountForSlot(
             @Param("date") LocalDate date,
             @Param("time") LocalTime time,
             @Param("statuses") Collection<ReservationStatus> statuses
