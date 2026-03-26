@@ -295,9 +295,11 @@ public class InventoryService {
         BigDecimal minimumStock = request.minimumStockPackages() != null
                 ? request.minimumStockPackages().multiply(contentPerPackage)
                 : request.minimumStock();
-        BigDecimal recommendedReorderAmount = item.getRecommendedReorderAmount() != null
-                ? item.getRecommendedReorderAmount()
-                : BigDecimal.ZERO;
+        BigDecimal recommendedReorderAmount = request.minimumStockPackages() != null
+            ? request.minimumStockPackages().multiply(contentPerPackage)
+            : (request.recommendedReorderAmount() != null
+                ? request.recommendedReorderAmount()
+                : BigDecimal.ZERO);
 
         item.setReorderThreshold(reorderThreshold);
         item.setMinimumStock(minimumStock);
