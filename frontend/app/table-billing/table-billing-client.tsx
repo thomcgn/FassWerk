@@ -13,10 +13,37 @@ import type { Drink, DrinkCategory, DrinkVariant, InventoryItem, SplitPaymentIte
 
 type LoadState = "loading" | "ready" | "error";
 
+const UNPAID_ARCHIVE_STORAGE_KEY = "table-billing-unpaid-archive";
+const BUSINESS_DATE_STORAGE_KEY = "table-billing-business-date";
+
+function todayIsoDate(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function toGermanDateLabel(value: string): string {
+  if (!value) return "";
+  const parsed = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return new Intl.DateTimeFormat("de-DE", { dateStyle: "medium" }).format(parsed);
+}
+
 function toCurrency(value: string): string {
   const amount = Number(value);
   if (Number.isNaN(amount)) return `${value} EUR`;
   return new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(amount);
+}
+
+function matchesBusinessDate(closedAt: string | null, businessDate: string): boolean {
+  if (!closedAt || !businessDate) return false;
+  return closedAt.slice(0, 10) === businessDate;
+}
+
+function sortByClosedAtDesc(entries: TableOrder[]): TableOrder[] {
+  return [...entries].sort((a, b) => {
+    const aTime = a.closedAt ? new Date(a.closedAt).getTime() : 0;
+    const bTime = b.closedAt ? new Date(b.closedAt).getTime() : 0;
+    return bTime - aTime;
+  });
 }
 
 function tableStatusVariant(status: Table["status"]): "success" | "warning" | "destructive" | "muted" {
@@ -42,6 +69,23 @@ export default function TableBillingClient() {
   const [newTableName, setNewTableName] = useState("");
   const [newTableArea, setNewTableArea] = useState("INSIDE");
   const [creatingTable, setCreatingTable] = useState(false);
+  const [unpaidArchive, setUnpaidArchive] = useState<TableOrder[]>(() => {
+    if (typeof window === "undefined") return [];
+    const raw = window.sessionStorage.getItem(UNPAID_ARCHIVE_STORAGE_KEY);
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw) as TableOrder[];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
+  const [archiveError, setArchiveError] = useState<string | null>(null);
+  const [businessDate, setBusinessDate] = useState(() => {
+    if (typeof window === "undefined") return todayIsoDate();
+    return window.sessionStorage.getItem(BUSINESS_DATE_STORAGE_KEY) ?? todayIsoDate();
+  });
+  const actionableTables = tables.filter((table) => table.status !== "FREE");
 
   useToastFeedback(error, "error");
   useToastFeedback(status, "success");
@@ -117,10 +161,82 @@ export default function TableBillingClient() {
     }
   }, [router, sellableVariants]);
 
+  const loadUnpaidArchive = useCallback(async (dateOverride?: string) => {
+    try {
+      setArchiveError(null);
+      const targetDate = dateOverride ?? businessDate;
+      const query = new URLSearchParams({ payment: "UNPAID" });
+      const response = await fetch(`/api/table-orders/archive?${query.toString()}`, { cache: "no-store" });
+
+      if (response.status === 401 || response.status === 403) {
+        router.replace("/login");
+        return;
+      }
+
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => ({}))) as { message?: string; error?: string };
+        const detail = payload.message ?? payload.error ?? `HTTP ${response.status}`;
+        setArchiveError(`Archiv konnte nicht geladen werden (${detail}).`);
+
+        const cached = window.sessionStorage.getItem(UNPAID_ARCHIVE_STORAGE_KEY);
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached) as TableOrder[];
+            setUnpaidArchive(Array.isArray(parsed) ? parsed : []);
+          } catch {
+            // ignore invalid cache payload
+          }
+        }
+        return;
+      }
+
+      const payload = sortByClosedAtDesc((await response.json()) as TableOrder[]);
+      setUnpaidArchive(payload);
+      window.sessionStorage.setItem(UNPAID_ARCHIVE_STORAGE_KEY, JSON.stringify(payload));
+      if (targetDate) {
+        window.sessionStorage.setItem(BUSINESS_DATE_STORAGE_KEY, targetDate);
+      }
+    } catch {
+      setArchiveError("Archiv konnte nicht geladen werden (Netzwerk/Backend nicht erreichbar).");
+
+      const cached = window.sessionStorage.getItem(UNPAID_ARCHIVE_STORAGE_KEY);
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached) as TableOrder[];
+          setUnpaidArchive(Array.isArray(parsed) ? parsed : []);
+        } catch {
+          // ignore invalid cache payload
+        }
+      }
+    }
+  }, [businessDate, router]);
+
   useEffect(() => {
-    const timer = window.setTimeout(() => void loadMeta(), 0);
+    window.sessionStorage.setItem(BUSINESS_DATE_STORAGE_KEY, businessDate);
+  }, [businessDate]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void loadMeta();
+      void loadUnpaidArchive();
+    }, 0);
     return () => window.clearTimeout(timer);
-  }, [loadMeta]);
+  }, [loadMeta, loadUnpaidArchive]);
+
+  useEffect(() => {
+    function refreshArchiveOnReturn() {
+      if (document.visibilityState === "visible") {
+        void loadUnpaidArchive();
+      }
+    }
+
+    window.addEventListener("focus", refreshArchiveOnReturn);
+    document.addEventListener("visibilitychange", refreshArchiveOnReturn);
+    return () => {
+      window.removeEventListener("focus", refreshArchiveOnReturn);
+      document.removeEventListener("visibilitychange", refreshArchiveOnReturn);
+    };
+  }, [loadUnpaidArchive]);
 
   async function openOrLoadTable(table: Table) {
     setError(null);
@@ -133,7 +249,7 @@ export default function TableBillingClient() {
       setOrder(payload);
       setOrderLookupId(String(payload.id));
       setIsModalOpen(true);
-      setStatus(`Tisch ${table.name} geladen.`);
+      setStatus(`Tisch ${table.name} geladen (Betriebstag ${toGermanDateLabel(businessDate)}).`);
       return;
     }
 
@@ -159,7 +275,7 @@ export default function TableBillingClient() {
     setOrder(payload);
     setOrderLookupId(String(payload.id));
     setIsModalOpen(true);
-    setStatus(`Tisch ${table.name} geöffnet.`);
+    setStatus(`Tisch ${table.name} geöffnet (Betriebstag ${toGermanDateLabel(businessDate)}).`);
   }
 
   async function fetchOrderById(id: string) {
@@ -217,14 +333,81 @@ export default function TableBillingClient() {
     setStatus(null);
     const response = await fetch(`/api/table-orders/${order.id}/close`, { method: "POST" });
     if (!response.ok) {
-      setError("Bon konnte nicht geschlossen werden.");
+      setError("Bezahlung konnte nicht abgeschlossen werden.");
       return;
     }
     const payload = (await response.json()) as TableOrder;
-    setOrder(payload);
-    setStatus(`Bon #${payload.id} abgeschlossen. Betrag ${toCurrency(payload.total)} wurde in die Umsatzauswertung übernommen.`);
+    setOrder(null);
+    setSelectedTableId("");
+    setStatus(`Bon #${payload.id} bezahlt. Betrag ${toCurrency(payload.total)} wurde in die Umsatzauswertung uebernommen.`);
     setIsModalOpen(false);
     await loadMeta();
+    await loadUnpaidArchive(businessDate);
+  }
+
+  async function markOrderUnpaid() {
+    if (!order) return;
+    setError(null);
+    setStatus(null);
+
+    const response = await fetch(`/api/table-orders/${order.id}/mark-unpaid`, { method: "POST" });
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => ({}))) as { message?: string };
+      setError(payload.message ?? "Bon konnte nicht zurückgestellt werden.");
+      return;
+    }
+
+    const payload = (await response.json()) as TableOrder;
+    if (matchesBusinessDate(payload.closedAt, businessDate)) {
+      setUnpaidArchive((current) => [payload, ...current.filter((entry) => entry.id !== payload.id)]);
+    }
+    setOrder(null);
+    setSelectedTableId("");
+    setStatus(`Bon #${payload.id} als unbezahlt zurückgestellt und ins Archiv verschoben.`);
+    setIsModalOpen(false);
+    await loadMeta();
+    await loadUnpaidArchive(businessDate);
+  }
+
+  async function reopenUnpaidOrder() {
+    if (!order) return;
+    setError(null);
+    setStatus(null);
+
+    const response = await fetch(`/api/table-orders/${order.id}/reopen-unpaid`, { method: "POST" });
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => ({}))) as { message?: string };
+      setError(payload.message ?? "Bon konnte nicht wieder geoeffnet werden.");
+      return;
+    }
+
+    const payload = (await response.json()) as TableOrder;
+    setOrder(payload);
+    setSelectedTableId(String(payload.tableId));
+    setStatus(`Bon #${payload.id} wurde wieder geoeffnet und kann jetzt bezahlt werden.`);
+    await loadMeta();
+    await loadUnpaidArchive(businessDate);
+  }
+
+  async function reopenUnpaidOrderById(orderId: number) {
+    setError(null);
+    setStatus(null);
+
+    const response = await fetch(`/api/table-orders/${orderId}/reopen-unpaid`, { method: "POST" });
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => ({}))) as { message?: string };
+      setError(payload.message ?? "Bon konnte nicht wieder geoeffnet werden.");
+      return;
+    }
+
+    const payload = (await response.json()) as TableOrder;
+    setOrder(payload);
+    setOrderLookupId(String(payload.id));
+    setSelectedTableId(String(payload.tableId));
+    setIsModalOpen(true);
+    setStatus(`Bon #${payload.id} wurde aus dem Archiv wieder geoeffnet.`);
+    await loadMeta();
+    await loadUnpaidArchive(businessDate);
   }
 
   async function splitPayment(items: SplitPaymentItemRequest[]) {
@@ -253,8 +436,11 @@ export default function TableBillingClient() {
     setStatus(`Teilzahlung als Bon #${payload.paidOrder.id} erfasst: ${toCurrency(payload.paidOrder.total)}.`);
 
     if (payload.openOrder.status !== "OPEN") {
+      setOrder(null);
+      setSelectedTableId("");
       setIsModalOpen(false);
       await loadMeta();
+      await loadUnpaidArchive(businessDate);
     }
   }
 
@@ -273,7 +459,7 @@ export default function TableBillingClient() {
       body: JSON.stringify({
         name: newTableName.trim(),
         area: newTableArea,
-        status: "FREE",
+        status: "OCCUPIED",
         active: true,
       }),
     });
@@ -288,7 +474,7 @@ export default function TableBillingClient() {
     const payload = (await response.json()) as Table;
     setNewTableName("");
     setNewTableArea("INSIDE");
-    setStatus(`Tisch ${payload.name} wurde angelegt.`);
+    setStatus(`Tisch ${payload.name} wurde für ${toGermanDateLabel(businessDate)} angelegt.`);
     await loadMeta();
     setCreatingTable(false);
   }
@@ -329,11 +515,12 @@ export default function TableBillingClient() {
             <p className="mt-3 text-sm leading-6 text-[color:var(--color-muted-foreground)]">
               Offene Tische antippen, direkt ins Tischdetail springen und Bestellungen per Tap erfassen.
             </p>
-            <div className="mt-6 grid gap-3 sm:grid-cols-3">
+            <div className="mt-6 grid gap-3 sm:grid-cols-4">
               {[
-                { label: "Tische", value: tables.length },
+                { label: "Aktive Tische", value: actionableTables.length },
                 { label: "Kategorien", value: categories.length },
                 { label: "Bon", value: order ? `#${order.id}` : "—" },
+                { label: "Betriebstag", value: toGermanDateLabel(businessDate) },
               ].map((item) => (
                 <div key={item.label} className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 p-4">
                   <p className="text-xs uppercase tracking-[0.2em] font-semibold text-cyan-400">{item.label}</p>
@@ -357,8 +544,56 @@ export default function TableBillingClient() {
 
         <Card>
           <CardHeader>
+            <CardTitle>Archiv: Unbezahlt</CardTitle>
+            <CardDescription>Zurueckgestellte Bons koennen hier erneut geladen werden.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto]">
+              <Input
+                type="date"
+                value={businessDate}
+                onChange={(event) => setBusinessDate(event.target.value)}
+                aria-label="Archivdatum"
+              />
+              <Button variant="outline" onClick={() => {
+                const today = todayIsoDate();
+                setBusinessDate(today);
+                void loadUnpaidArchive(today);
+              }}>Heute</Button>
+              <Button variant="outline" onClick={() => void loadUnpaidArchive(businessDate)}>Aktualisieren</Button>
+            </div>
+            {archiveError ? <p className="text-sm text-red-300">{archiveError}</p> : null}
+            {unpaidArchive.length === 0 ? (
+              <p className="text-sm text-[color:var(--color-muted-foreground)]">Keine unbezahlten Bons im Archiv.</p>
+            ) : (
+              <div className="max-h-96 space-y-2 overflow-y-auto pr-1">
+                {unpaidArchive.map((entry) => (
+                <div key={entry.id} className="flex items-center justify-between gap-2 rounded-lg border border-white/10 bg-white/5 p-3">
+                  <div>
+                    <p className="text-sm font-semibold">Bon #{entry.id} · {entry.tableName}</p>
+                    <p className="text-xs text-[color:var(--color-muted-foreground)]">
+                      {toCurrency(entry.total)}{entry.closedAt ? ` · ${new Date(entry.closedAt).toLocaleString("de-DE")}` : ""}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" onClick={() => void fetchOrderById(String(entry.id))}>
+                      Bon #{entry.id} laden
+                    </Button>
+                    <Button size="sm" onClick={() => void reopenUnpaidOrderById(entry.id)}>
+                      Wieder oeffnen
+                    </Button>
+                  </div>
+                </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
             <CardTitle>Neuen Tisch anlegen</CardTitle>
-            <CardDescription>Erzeuge eigene Tische/Deckel für Laufkundschaft und freie Plätze.</CardDescription>
+            <CardDescription>Erzeuge eigene Tische/Deckel für Laufkundschaft und freie Plätze (Betriebstag {toGermanDateLabel(businessDate)}).</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3 sm:grid-cols-2">
             <Input
@@ -385,11 +620,11 @@ export default function TableBillingClient() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Offene Tische</CardTitle>
-          <CardDescription>Tippe/Klicke auf einen Tisch, um ihn zu öffnen oder den aktiven Bon zu laden.</CardDescription>
+          <CardTitle>Aktive Tische</CardTitle>
+          <CardDescription>Es werden nur Tische mit aktivem Vorgang angezeigt; bezahlte oder zurückgestellte Bons verschwinden aus dieser Übersicht.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-          {tables.map((table) => (
+          {actionableTables.map((table) => (
             <button
               key={table.id}
               type="button"
@@ -407,6 +642,11 @@ export default function TableBillingClient() {
               </div>
             </button>
           ))}
+          {actionableTables.length === 0 ? (
+            <p className="text-sm text-[color:var(--color-muted-foreground)] sm:col-span-2 md:col-span-3 lg:col-span-4">
+              Aktuell keine aktiven Tische. Lege bei Bedarf einen neuen Tisch an.
+            </p>
+          ) : null}
         </CardContent>
       </Card>
 
@@ -420,6 +660,8 @@ export default function TableBillingClient() {
         onAddItem={addItem}
         onRemoveItem={removeItem}
         onCloseOrder={closeOrder}
+        onMarkUnpaidOrder={markOrderUnpaid}
+        onReopenUnpaidOrder={reopenUnpaidOrder}
         onSplitPayment={splitPayment}
         error={error}
         status={status}

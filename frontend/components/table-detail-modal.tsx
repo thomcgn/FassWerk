@@ -24,6 +24,8 @@ interface TableDetailModalProps {
   onAddItem: (drinkVariantId: number, quantity: number) => Promise<void>;
   onRemoveItem: (itemId: number) => Promise<void>;
   onCloseOrder: () => Promise<void>;
+  onMarkUnpaidOrder: () => Promise<void>;
+  onReopenUnpaidOrder: () => Promise<void>;
   onSplitPayment: (items: SplitPaymentItemRequest[]) => Promise<void>;
   error: string | null;
   status: string | null;
@@ -39,6 +41,8 @@ export function TableDetailModal({
   onAddItem,
   onRemoveItem,
   onCloseOrder,
+  onMarkUnpaidOrder,
+  onReopenUnpaidOrder,
   onSplitPayment,
   error,
   status,
@@ -235,7 +239,22 @@ export function TableDetailModal({
                   <p className="text-sm text-[color:var(--color-muted-foreground)]">Gesamt</p>
                   <p className="text-2xl font-semibold text-[color:var(--color-foreground)]">{toCurrency(order.total)}</p>
                 </div>
-                <Button className="h-12" onClick={() => void onCloseOrder()} disabled={!canEditOrder}>Bon schließen</Button>
+                <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                  {order.status === "CLOSED" && !order.paid ? (
+                    <Button className="h-12" variant="secondary" onClick={() => void onReopenUnpaidOrder()}>
+                      Wieder oeffnen
+                    </Button>
+                  ) : null}
+                  <Button
+                    className="h-12"
+                    variant="outline"
+                    onClick={() => void onMarkUnpaidOrder()}
+                    disabled={!canEditOrder}
+                  >
+                    Zurückstellen
+                  </Button>
+                  <Button className="h-12" onClick={() => void onCloseOrder()} disabled={!canEditOrder}>Bezahlen</Button>
+                </div>
               </div>
 
               {status ? <p className="rounded-2xl bg-green-500/15 border border-green-500/30 px-4 py-3 text-sm text-green-300">{status}</p> : null}

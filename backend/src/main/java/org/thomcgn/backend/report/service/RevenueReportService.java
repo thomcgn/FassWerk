@@ -42,13 +42,13 @@ public class RevenueReportService {
         BigDecimal weekConsumedMl = consumedMlForRange(weekStart.atStartOfDay(), today.plusDays(1).atStartOfDay());
         BigDecimal monthConsumedMl = consumedMlForRange(monthStart.atStartOfDay(), today.plusDays(1).atStartOfDay());
 
-        List<TableOrder> weekOrders = tableOrderRepository.findAllByStatusAndClosedAtBetween(
+        List<TableOrder> weekOrders = tableOrderRepository.findAllByStatusAndPaidTrueAndClosedAtBetween(
                 TableOrderStatus.CLOSED,
                 weekStart.atStartOfDay(),
                 today.plusDays(1).atStartOfDay()
         );
 
-        List<TableOrder> monthOrders = tableOrderRepository.findAllByStatusAndClosedAtBetween(
+        List<TableOrder> monthOrders = tableOrderRepository.findAllByStatusAndPaidTrueAndClosedAtBetween(
                 TableOrderStatus.CLOSED,
                 monthStart.atStartOfDay(),
                 today.plusDays(1).atStartOfDay()
@@ -87,10 +87,7 @@ public class RevenueReportService {
     }
 
     private BigDecimal sumForRange(LocalDateTime start, LocalDateTime end) {
-        List<TableOrder> orders = tableOrderRepository.findAllByStatusAndClosedAtBetween(TableOrderStatus.CLOSED, start, end);
-        return orders.stream()
-                .map(order -> tableOrderItemRepository.getTotalByTableOrderId(order.getId()))
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        return tableOrderItemRepository.getRevenueByClosedRange(TableOrderStatus.CLOSED, start, end);
     }
 
     private BigDecimal consumedMlForRange(LocalDateTime start, LocalDateTime end) {

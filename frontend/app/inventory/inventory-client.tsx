@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { useToastFeedback } from "@/lib/use-toast-feedback";
+import { ReorderDashboard } from "@/components/reorder-dashboard";
 import type { Drink, DrinkVariant, InventoryItem, InventoryItemUpsertRequest, InventoryPackageDefaults } from "@/types/api";
 
 type LoadState = "loading" | "ready" | "error";
@@ -225,7 +226,7 @@ export default function InventoryClient() {
   const [linkItemId, setLinkItemId] = useState("");
   const [showInventoryConfig, setShowInventoryConfig] = useState(false);
   const [inventoryConfigVisibilityInitialized, setInventoryConfigVisibilityInitialized] = useState(false);
-  const [form, setForm] = useState({
+    const [form, setForm] = useState({
     name: "",
     linkedDrinkId: "",
     linkedDrinkVariantId: "",
@@ -238,7 +239,9 @@ export default function InventoryClient() {
     bottlesPerCrate: crateDefaults.bottlesPerCrate,
     litersPerBottle: crateDefaults.litersPerBottle,
     supplier: "",
-  });
+    });
+
+    const [expandedItemId, setExpandedItemId] = useState<number | null>(null);
 
   useToastFeedback(error, "error");
   useToastFeedback(configError, "error");
@@ -837,7 +840,7 @@ export default function InventoryClient() {
 
               <div className="space-y-2">
                 <Label>Empfohlene Nachbestellmenge</Label>
-                <div className="rounded-lg border border-[color:var(--color-border-strong)] bg-[color:var(--color-surface-muted)]/60 px-3 py-2 text-sm text-[color:var(--color-muted-foreground)]">
+                <div className="rounded-lg border border-[color:var(--color-border-strong)] bg-[color:var(--color-surface-muted)]/60 px-3 py-2 text-sm text-[color:var(--color-muted-foreground]">
                   Wird automatisch aus Verbrauch/Nachbestellung berechnet.
                 </div>
               </div>

@@ -1,6 +1,9 @@
 package org.thomcgn.backend.auth.api;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.servlet.http.HttpServletRequest;
@@ -37,12 +40,20 @@ public class AuthController {
 
     @PostMapping("/login")
     @Operation(summary = "Benutzer einloggen")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Login erfolgreich"),
+            @ApiResponse(responseCode = "401", description = "Anmeldedaten ungueltig")
+    })
     public LoginResponse login(@Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
         return authService.login(request, extractMetadata(httpRequest));
     }
 
     @PostMapping("/refresh")
     @Operation(summary = "Access-Token mit Refresh-Token erneuern")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Token erneuert"),
+            @ApiResponse(responseCode = "401", description = "Refresh-Token ungueltig")
+    })
     public LoginResponse refresh(@Valid @RequestBody RefreshTokenRequest request, HttpServletRequest httpRequest) {
         return authService.refresh(request, extractMetadata(httpRequest));
     }
@@ -50,6 +61,8 @@ public class AuthController {
     @PostMapping("/logout")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @Operation(summary = "Aktuelle Session ausloggen")
+    @SecurityRequirement(name = "bearerAuth")
+    @ApiResponse(responseCode = "204", description = "Session ausgeloggt")
     public void logout(
             @Valid @RequestBody LogoutRequest request,
             @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader
@@ -59,6 +72,8 @@ public class AuthController {
 
     @GetMapping("/sessions")
     @Operation(summary = "Aktive Sessions des aktuellen Benutzers abrufen")
+    @SecurityRequirement(name = "bearerAuth")
+    @ApiResponse(responseCode = "200", description = "Sessions geladen")
     public List<SessionResponse> sessions(
             Principal principal,
             @RequestHeader(value = "X-Current-Refresh-Token", required = false) String currentRefreshToken
@@ -69,6 +84,8 @@ public class AuthController {
     @DeleteMapping("/sessions/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @Operation(summary = "Eine Session des aktuellen Benutzers beenden")
+    @SecurityRequirement(name = "bearerAuth")
+    @ApiResponse(responseCode = "204", description = "Session beendet")
     public void revokeSession(@PathVariable Long id, Principal principal) {
         authService.revokeSession(principal.getName(), id);
     }
@@ -76,6 +93,8 @@ public class AuthController {
     @PostMapping("/logout-all")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @Operation(summary = "Alle Sessions des aktuellen Benutzers beenden")
+    @SecurityRequirement(name = "bearerAuth")
+    @ApiResponse(responseCode = "204", description = "Alle Sessions beendet")
     public void logoutAll(
             Principal principal,
             @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader

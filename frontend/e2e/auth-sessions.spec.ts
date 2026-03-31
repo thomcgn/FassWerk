@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { mockAuthenticatedSession } from "./support/mock-auth";
+import { stableIsoTimestamp } from "./support/test-data";
 
 test("login -> sessions revoke -> logout-all flow", async ({ page }) => {
   await mockAuthenticatedSession(page);
@@ -32,13 +33,16 @@ test("login -> sessions revoke -> logout-all flow", async ({ page }) => {
     });
   });
 
+  const now = new Date(stableIsoTimestamp()).toISOString();
+  const expiresAt = new Date(new Date(stableIsoTimestamp()).getTime() + 3600_000).toISOString();
+
   let sessions = [
     {
       id: 101,
       tokenId: "current-token-111111",
-      createdAt: new Date().toISOString(),
-      expiresAt: new Date(Date.now() + 3600_000).toISOString(),
-      lastUsedAt: new Date().toISOString(),
+      createdAt: now,
+      expiresAt,
+      lastUsedAt: now,
       userAgent: "Chrome on Linux (Desktop)",
       ipAddress: "127.0.0.1",
       current: true,
@@ -46,8 +50,8 @@ test("login -> sessions revoke -> logout-all flow", async ({ page }) => {
     {
       id: 102,
       tokenId: "other-token-222222",
-      createdAt: new Date().toISOString(),
-      expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+      createdAt: now,
+      expiresAt,
       lastUsedAt: null,
       userAgent: "Safari on iOS (Mobile)",
       ipAddress: "10.0.0.10",

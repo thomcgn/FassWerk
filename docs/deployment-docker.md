@@ -27,6 +27,10 @@ docker compose logs frontend --tail=100
 - Backend API: `http://localhost:8080`
 - Health: `http://localhost:8080/actuator/health`
 
+## Betrieb und Incident-Runbooks
+- Backup/Restore: `docs/operations/backup-restore.md`
+- Monitoring/Alerting: `docs/operations/monitoring-alerting.md`
+
 ## Optional: Nur Images bauen
 
 ```bash

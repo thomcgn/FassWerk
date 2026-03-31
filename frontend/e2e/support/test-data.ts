@@ -1,5 +1,9 @@
 export function todayIsoDate(): string {
-  return new Date().toISOString().slice(0, 10);
+  return process.env.E2E_FIXED_DATE ?? new Date().toISOString().slice(0, 10);
+}
+
+export function stableIsoTimestamp(): string {
+  return process.env.E2E_FIXED_TIMESTAMP ?? "2026-03-20T18:00:00.000Z";
 }
 
 export function reservationBase(overrides: Record<string, unknown> = {}) {

@@ -2,6 +2,9 @@
 
 Die versionierte OpenAPI-Spezifikation wird in CI erzeugt und als Artefakt abgelegt.
 
+CI-Workflow:
+- `.github/workflows/ci.yml` (Job `backend-openapi`)
+
 ## Erwartetes Artefakt
 - `openapi-v<version>.yaml`
 
@@ -9,6 +12,12 @@ Beispiel:
 - `openapi-v0.0.1-SNAPSHOT.yaml`
 
 ## Lokal erzeugen
+
+```bash
+./backend/scripts/export-openapi.sh
+```
+
+Alternative (manuell):
 
 ```bash
 cd backend

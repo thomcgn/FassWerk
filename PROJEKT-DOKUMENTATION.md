@@ -297,8 +297,10 @@ docker compose up --build
    - Akzeptanzkriterium: Jede produktive Auslieferung hat nachvollziehbare, auditierbare Release Notes.
 
 ## 11.2 Konkrete Deliverables
-- `docs/api/openapi.yaml` (oder CI-Artefakt-Link)
+- `docs/api/openapi-v<version>.yaml` + CI-Artefakt (`.github/workflows/ci.yml`)
+- `backend/scripts/export-openapi.sh` fuer lokalen versionierten Export
 - `frontend/e2e/*.spec.ts` fuer die drei kritischen End-to-End-Flows
+- `frontend/e2e/support/test-data.ts` + `frontend/e2e/support/mock-api.ts` fuer reproduzierbare Testdaten
 - `docs/operations/backup-restore.md`
 - `docs/operations/monitoring-alerting.md`
 - `docs/operations/data-quality-checks.md`

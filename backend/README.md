@@ -59,13 +59,10 @@ Das Script laedt alle Variablen aus `.env` und startet das Backend konsistent mi
 Versionierte OpenAPI lokal exportieren:
 
 ```bash
-./mvnw -q -DskipTests package
-VERSION=$(./mvnw -q help:evaluate -Dexpression=project.version -DforceStdout)
-java -jar target/backend-${VERSION}.jar > /tmp/backend.log 2>&1 &
-sleep 10
-curl -fsS http://127.0.0.1:8080/v3/api-docs.yaml -o ../docs/api/openapi-v${VERSION}.yaml
-pkill -f "backend-${VERSION}.jar" || true
+./scripts/export-openapi.sh
 ```
+
+In CI wird die Datei ebenfalls erzeugt und als Build-Artefakt abgelegt (siehe `.github/workflows/ci.yml`).
 
 ## Seed users
 - Admin: `admin@fasswerk.local` / `ChangeMe123!`

@@ -2,6 +2,9 @@ package org.thomcgn.backend.inventory.api;
 
 import jakarta.validation.Valid;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -45,6 +48,7 @@ import java.util.List;
 @RequiredArgsConstructor
 @RequestMapping("/api/inventory")
 @Tag(name = "Inventory", description = "Lagerverwaltung, Verbrauchstracking, Nachbestellung und Sales-Konfiguration")
+@SecurityRequirement(name = "bearerAuth")
 public class InventoryController {
 
     private final InventoryService inventoryService;
@@ -54,6 +58,7 @@ public class InventoryController {
 
     @GetMapping
     @Operation(summary = "Lagerartikel auflisten")
+    @ApiResponse(responseCode = "200", description = "Lagerliste geladen")
     public List<InventoryItemResponse> list() {
         return inventoryService.listItems();
     }
@@ -61,12 +66,20 @@ public class InventoryController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Lagerartikel anlegen")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Lagerartikel erstellt"),
+            @ApiResponse(responseCode = "400", description = "Ungueltige Eingabe")
+    })
     public InventoryItemResponse create(@Valid @RequestBody InventoryItemRequest request) {
         return inventoryService.createItem(request);
     }
 
     @PutMapping("/{id}")
     @Operation(summary = "Lagerartikel aktualisieren")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Lagerartikel aktualisiert"),
+            @ApiResponse(responseCode = "404", description = "Lagerartikel nicht gefunden")
+    })
     public InventoryItemResponse update(@PathVariable Long id, @Valid @RequestBody InventoryItemRequest request) {
         return inventoryService.updateItem(id, request);
     }
@@ -74,12 +87,17 @@ public class InventoryController {
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @Operation(summary = "Lagerartikel loeschen")
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "Lagerartikel geloescht"),
+            @ApiResponse(responseCode = "404", description = "Lagerartikel nicht gefunden")
+    })
     public void delete(@PathVariable Long id) {
         inventoryService.deleteItem(id);
     }
 
     @PostMapping("/{id}/adjust")
     @Operation(summary = "Lagerbestand manuell korrigieren")
+    @ApiResponse(responseCode = "200", description = "Bestand angepasst")
     public InventoryItemResponse adjust(
             @PathVariable Long id,
             @Valid @RequestBody InventoryAdjustmentRequest request,
@@ -91,18 +109,21 @@ public class InventoryController {
 
     @GetMapping("/movements")
     @Operation(summary = "Lagerbewegungen abrufen")
+    @ApiResponse(responseCode = "200", description = "Bewegungen geladen")
     public List<InventoryMovementResponse> movements() {
         return inventoryService.listMovements();
     }
 
     @GetMapping("/reorder-suggestions")
     @Operation(summary = "Nachbestellvorschlaege abrufen")
+    @ApiResponse(responseCode = "200", description = "Nachbestellvorschlaege geladen")
     public List<ReorderSuggestionResponse> reorderSuggestions() {
         return inventoryService.getReorderSuggestions();
     }
 
     @GetMapping("/defaults")
     @Operation(summary = "Standardwerte pro Gebindeart abrufen")
+    @ApiResponse(responseCode = "200", description = "Standardwerte geladen")
     public List<InventoryPackageDefaultsResponse> defaults() {
         return inventoryService.getPackageDefaults();
     }
@@ -111,6 +132,7 @@ public class InventoryController {
 
     @GetMapping("/sales/daily")
     @Operation(summary = "Taegliche Verkaufsdaten fuer Zeitraum abrufen")
+    @ApiResponse(responseCode = "200", description = "Taegliche Verkaufsdaten geladen")
     public List<DrinkSalesDailyResponse> getDailySales(
             @RequestParam LocalDate startDate,
             @RequestParam LocalDate endDate
@@ -131,6 +153,7 @@ public class InventoryController {
 
     @GetMapping("/sales/weekly/{variantId}")
     @Operation(summary = "Woechentliche Verkaufsaggregation fuer Variante abrufen")
+    @ApiResponse(responseCode = "200", description = "Woechentliche Verkaufsdaten geladen")
     public List<DrinkSalesWeeklyResponse> getWeeklySales(
             @PathVariable Long variantId,
             @RequestParam(defaultValue = "4") Integer weeks
@@ -155,6 +178,10 @@ public class InventoryController {
 
     @GetMapping("/{id}/reorder-calculation")
     @Operation(summary = "Letzte Nachbestellberechnung fuer Lagerartikel abrufen")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Berechnung geladen oder null bei fehlenden Daten"),
+            @ApiResponse(responseCode = "404", description = "Lagerartikel nicht gefunden")
+    })
     public ReorderCalculationResponse getLatestReorderCalculation(@PathVariable Long id) {
         return reorderCalculationService.getLatestCalculation(id)
                 .map(this::toReorderCalculationResponse)
@@ -163,6 +190,7 @@ public class InventoryController {
 
     @PostMapping("/{id}/calculate-reorder")
     @Operation(summary = "Nachbestellberechnung fuer Lagerartikel sofort ausfuehren")
+    @ApiResponse(responseCode = "200", description = "Berechnung ausgefuehrt")
     public ReorderCalculationResponse calculateReorder(@PathVariable Long id) {
         var item = inventoryService.getItem(id);
         ReorderCalculation calculation = reorderCalculationService.calculateReorderAmount(
@@ -173,6 +201,7 @@ public class InventoryController {
 
     @GetMapping("/reorder-calculations/below-threshold")
     @Operation(summary = "Artikel unter Schwellwert abrufen")
+    @ApiResponse(responseCode = "200", description = "Artikel unter Schwellwert geladen")
     public List<ReorderCalculationResponse> getItemsBelowThreshold() {
         return reorderCalculationService.getItemsBelowThreshold().stream()
                 .map(this::toReorderCalculationResponse)
@@ -181,6 +210,7 @@ public class InventoryController {
 
     @GetMapping("/{id}/reorder-calculations/history")
     @Operation(summary = "Historie der Nachbestellberechnungen abrufen")
+    @ApiResponse(responseCode = "200", description = "Historie geladen")
     public List<ReorderCalculationResponse> getReorderCalculationHistory(
             @PathVariable Long id,
             @RequestParam(defaultValue = "10") int limit
@@ -194,6 +224,7 @@ public class InventoryController {
 
     @GetMapping("/{id}/consumption-metadata")
     @Operation(summary = "Verbrauchsmetadaten fuer Lagerartikel abrufen")
+    @ApiResponse(responseCode = "501", description = "Noch nicht implementiert (Placeholder)")
     public ConsumptionMetadataResponse getConsumptionMetadata(@PathVariable Long id) {
         // Note: This endpoint assumes the service can fetch it
         // You may need to add a method to ReorderCalculationService to retrieve it
@@ -202,6 +233,7 @@ public class InventoryController {
 
     @PutMapping("/{id}/consumption-metadata")
     @Operation(summary = "Verbrauchsmetadaten fuer Lagerartikel aktualisieren")
+    @ApiResponse(responseCode = "200", description = "Verbrauchsmetadaten aktualisiert")
     public ConsumptionMetadataResponse updateConsumptionMetadata(
             @PathVariable Long id,
             @Valid @RequestBody ConsumptionMetadataRequest request
@@ -245,6 +277,7 @@ public class InventoryController {
 
     @GetMapping("/configuration")
     @Operation(summary = "Globale Sales-/Business-Day-Konfiguration laden")
+    @ApiResponse(responseCode = "200", description = "Konfiguration geladen")
     public SalesConfigurationResponse getConfiguration() {
         var config = salesConfigurationService.getConfiguration();
         return new SalesConfigurationResponse(
@@ -260,6 +293,7 @@ public class InventoryController {
 
     @PutMapping("/configuration")
     @Operation(summary = "Globale Sales-/Business-Day-Konfiguration speichern")
+    @ApiResponse(responseCode = "200", description = "Konfiguration gespeichert")
     public SalesConfigurationResponse updateConfiguration(
             @Valid @RequestBody SalesConfigurationRequest request
     ) {
@@ -284,6 +318,7 @@ public class InventoryController {
 
     @PostMapping("/configuration/manual-day-close")
     @Operation(summary = "Geschaeftstag manuell abschliessen")
+    @ApiResponse(responseCode = "200", description = "Geschaeftstag abgeschlossen")
     public SalesConfigurationResponse closeBusinessDayManually() {
         var config = salesConfigurationService.closeBusinessDayManually();
         return new SalesConfigurationResponse(

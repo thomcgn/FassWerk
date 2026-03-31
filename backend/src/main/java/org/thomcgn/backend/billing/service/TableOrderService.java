@@ -130,8 +130,22 @@ public class TableOrderService {
             throw new ConflictException("Order item does not belong to table order");
         }
 
-        inventoryService.restockForCancelledOrderItem(item.getDrinkVariant(), item.getDeductedVolumeMl(), item.getId().toString());
-        itemRepository.delete(item);
+        BigDecimal unitDeductedVolume = item.getDeductedVolumeMl().divide(
+                BigDecimal.valueOf(item.getQuantity()),
+                4,
+                RoundingMode.HALF_UP
+        );
+        inventoryService.restockForCancelledOrderItem(item.getDrinkVariant(), unitDeductedVolume, item.getId().toString());
+
+        if (item.getQuantity() <= 1) {
+            itemRepository.delete(item);
+        } else {
+            int remainingQuantity = item.getQuantity() - 1;
+            item.setQuantity(remainingQuantity);
+            item.setTotalPrice(item.getUnitPrice().multiply(BigDecimal.valueOf(remainingQuantity)));
+            item.setDeductedVolumeMl(unitDeductedVolume.multiply(BigDecimal.valueOf(remainingQuantity)).setScale(2, RoundingMode.HALF_UP));
+            itemRepository.save(item);
+        }
 
         return toResponse(order);
     }
@@ -192,10 +206,6 @@ public class TableOrderService {
 
     @Transactional(readOnly = true)
     public List<TableOrderResponse> searchArchive(LocalDate date, String query, String paymentFilter) {
-        LocalDate targetDate = date != null ? date : LocalDate.now();
-        LocalDateTime start = targetDate.atStartOfDay();
-        LocalDateTime end = targetDate.plusDays(1).atStartOfDay();
-
         Boolean paid = null;
         if (paymentFilter != null) {
             String normalized = paymentFilter.trim().toUpperCase();
@@ -207,6 +217,47 @@ public class TableOrderService {
         }
 
         String queryText = (query == null || query.isBlank()) ? null : query.trim();
+
+        if (Boolean.FALSE.equals(paid)) {
+            if (queryText == null) {
+                return orderRepository.findAllByStatusAndPaidFalseOrderByClosedAtDesc(TableOrderStatus.CLOSED)
+                        .stream()
+                        .map(this::toResponse)
+                        .toList();
+            }
+            return orderRepository.searchUnpaidArchive(TableOrderStatus.CLOSED, queryText)
+                    .stream()
+                    .map(this::toResponse)
+                    .toList();
+        }
+
+        LocalDate targetDate = date != null ? date : LocalDate.now();
+        LocalDateTime start = targetDate.atStartOfDay();
+        LocalDateTime end = targetDate.plusDays(1).atStartOfDay();
+
+        if (queryText == null) {
+            if (paid == null) {
+                return orderRepository.findAllByStatusAndClosedAtGreaterThanEqualAndClosedAtLessThanOrderByClosedAtDesc(
+                                TableOrderStatus.CLOSED,
+                                start,
+                                end
+                        )
+                        .stream()
+                        .map(this::toResponse)
+                        .toList();
+            }
+
+            return orderRepository.findAllByStatusAndPaidAndClosedAtGreaterThanEqualAndClosedAtLessThanOrderByClosedAtDesc(
+                            TableOrderStatus.CLOSED,
+                            paid,
+                            start,
+                            end
+                    )
+                    .stream()
+                    .map(this::toResponse)
+                    .toList();
+        }
+
         return orderRepository.searchArchive(TableOrderStatus.CLOSED, start, end, queryText, paid)
                 .stream()
                 .map(this::toResponse)
@@ -329,24 +380,16 @@ public class TableOrderService {
 
     private TableOrderResponse toResponse(TableOrder order) {
         List<TableOrderItemResponse> itemResponses = itemRepository.findByTableOrderId(order.getId()).stream()
-                .map(item -> new TableOrderItemResponse(
-                        item.getId(),
-                        item.getDrinkVariant().getId(),
-                        item.getDrinkVariant().getDrink().getName() + " " + item.getDrinkVariant().getDisplayVolumeName(),
-                        item.getQuantity(),
-                        item.getUnitPrice(),
-                        item.getTotalPrice(),
-                        item.getDeductedVolumeMl()
-                ))
+                .map(this::toItemResponseSafely)
                 .toList();
 
         BigDecimal total = itemRepository.getTotalByTableOrderId(order.getId());
 
         return new TableOrderResponse(
                 order.getId(),
-                order.getTable().getId(),
-                order.getTable().getName(),
-                order.getReservation() != null ? order.getReservation().getId() : null,
+                resolveTableId(order),
+                resolveTableName(order),
+                resolveReservationId(order),
                 order.getStatus(),
                 order.isPaid(),
                 order.getOpenedAt(),
@@ -354,6 +397,54 @@ public class TableOrderService {
                 total,
                 itemResponses
         );
+    }
+
+    private TableOrderItemResponse toItemResponseSafely(TableOrderItem item) {
+        try {
+            return new TableOrderItemResponse(
+                    item.getId(),
+                    item.getDrinkVariant().getId(),
+                    item.getDrinkVariant().getDrink().getName() + " " + item.getDrinkVariant().getDisplayVolumeName(),
+                    item.getQuantity(),
+                    item.getUnitPrice(),
+                    item.getTotalPrice(),
+                    item.getDeductedVolumeMl()
+            );
+        } catch (RuntimeException ignored) {
+            return new TableOrderItemResponse(
+                    item.getId(),
+                    null,
+                    "Geloeschte Variante",
+                    item.getQuantity(),
+                    item.getUnitPrice(),
+                    item.getTotalPrice(),
+                    item.getDeductedVolumeMl()
+            );
+        }
+    }
+
+    private Long resolveTableId(TableOrder order) {
+        try {
+            return order.getTable() != null ? order.getTable().getId() : null;
+        } catch (RuntimeException ignored) {
+            return null;
+        }
+    }
+
+    private String resolveTableName(TableOrder order) {
+        try {
+            return order.getTable() != null ? order.getTable().getName() : "Unbekannter Tisch";
+        } catch (RuntimeException ignored) {
+            return "Unbekannter Tisch";
+        }
+    }
+
+    private Long resolveReservationId(TableOrder order) {
+        try {
+            return order.getReservation() != null ? order.getReservation().getId() : null;
+        } catch (RuntimeException ignored) {
+            return null;
+        }
     }
 }
 

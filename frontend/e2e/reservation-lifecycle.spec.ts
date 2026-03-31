@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test";
+import type { Route } from "@playwright/test";
 import { mockAuthenticatedSession } from "./support/mock-auth";
-import { reservationBase, todayIsoDate } from "./support/test-data";
+import { mockReservationBootstrap } from "./support/mock-api";
+import { reservationBase, stableIsoTimestamp, todayIsoDate } from "./support/test-data";
 
 test("reservierung: PENDING -> CONFIRMED/REJECTED -> CHECKED_IN", async ({ page }) => {
   const today = todayIsoDate();
@@ -12,26 +14,20 @@ test("reservierung: PENDING -> CONFIRMED/REJECTED -> CHECKED_IN", async ({ page 
 
   await mockAuthenticatedSession(page);
 
-  await page.route("**/api/inventory", async (route) => {
-    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([]) });
-  });
+  await mockReservationBootstrap(page, reservations);
 
-  await page.route("**/api/reservations?date=**", async (route) => {
-    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(reservations) });
-  });
-
-  await page.route("**/api/reservations/301/confirm", async (route) => {
+  await page.route("**/api/reservations/301/confirm", async (route: Route) => {
     reservations[0].status = "CONFIRMED";
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(reservations[0]) });
   });
 
-  await page.route("**/api/reservations/301/check-in", async (route) => {
+  await page.route("**/api/reservations/301/check-in", async (route: Route) => {
     reservations[0].status = "CHECKED_IN";
-    reservations[0].checkedInAt = new Date().toISOString();
+    (reservations[0] as { checkedInAt: string | null }).checkedInAt = stableIsoTimestamp();
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(reservations[0]) });
   });
 
-  await page.route("**/api/reservations/302/cancel", async (route) => {
+  await page.route("**/api/reservations/302/cancel", async (route: Route) => {
     reservations[1].status = "REJECTED";
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(reservations[1]) });
   });
@@ -41,17 +37,20 @@ test("reservierung: PENDING -> CONFIRMED/REJECTED -> CHECKED_IN", async ({ page 
   await expect(page.getByRole("heading", { name: "Reservierungen Dashboard" })).toBeVisible();
   await expect(page.getByText("Anna Pending").first()).toBeVisible();
 
-  await page.getByRole("button", { name: /Best.*tigen/ }).first().click();
-  await expect(page.getByText("CONFIRMED")).toBeVisible();
+  const annaCard = page.locator("div.rounded-lg").filter({ hasText: "Anna Pending" }).first();
+  const benCard = page.locator("div.rounded-lg").filter({ hasText: "Ben Pending" }).first();
 
-  await page.getByRole("button", { name: "Check-in" }).first().click();
-  await expect(page.getByRole("button", { name: "Check-in" })).toHaveCount(0);
+  await annaCard.getByRole("button", { name: "Bestätigen" }).click();
+  await expect(annaCard.getByText("CONFIRMED")).toBeVisible();
 
-  await page.getByRole("button", { name: "Ablehnen" }).first().click();
+  await annaCard.getByRole("button", { name: "Check-in" }).click();
+  await expect(annaCard.getByRole("button", { name: "Check-in" })).toHaveCount(0);
+
+  await benCard.getByRole("button", { name: "Ablehnen" }).click();
   await page.locator("textarea").fill("Slot intern nicht verfügbar");
   await page.getByRole("button", { name: "Ablehnen" }).last().click();
 
-  await expect(page.getByText("Abgelehnt")).toBeVisible();
+  await expect(page.getByRole("main").getByText("Reservierung abgelehnt.")).toBeVisible();
   await expect(page.getByText("Ben Pending").first()).toBeVisible();
 });
 

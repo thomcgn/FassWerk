@@ -1,0 +1,8 @@
+<testsuites id="" name="" tests="2" failures="0" skipped="0" errors="0" time="14.8338">
+<testsuite name="table-billing-archive-regression.spec.ts" timestamp="2026-03-31T11:49:08.019Z" hostname="chromium" tests="2" failures="0" skipped="0" time="12.67" errors="0">
+<testcase name="archive loads successfully with empty database" classname="table-billing-archive-regression.spec.ts" time="1.208">
+</testcase>
+<testcase name="unpaid order persists in archive after navigation" classname="table-billing-archive-regression.spec.ts" time="11.462">
+</testcase>
+</testsuite>
+</testsuites>

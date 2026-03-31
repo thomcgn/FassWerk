@@ -1,6 +1,8 @@
 package org.thomcgn.backend.menu.api;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -31,12 +33,14 @@ import java.util.List;
 @RequiredArgsConstructor
 @RequestMapping("/api")
 @Tag(name = "Menu", description = "Bar-Administration fuer Kategorien, Getraenke, Varianten und Volumenpreise")
+@SecurityRequirement(name = "bearerAuth")
 public class MenuController {
 
     private final MenuService menuService;
 
     @GetMapping("/drink-categories")
     @Operation(summary = "Getraenkekategorien auflisten")
+    @ApiResponse(responseCode = "200", description = "Kategorien geladen")
     public List<DrinkCategoryResponse> listCategories() {
         return menuService.listCategories();
     }
@@ -44,12 +48,14 @@ public class MenuController {
     @PostMapping("/drink-categories")
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Getraenkekategorie anlegen")
+    @ApiResponse(responseCode = "201", description = "Kategorie erstellt")
     public DrinkCategoryResponse createCategory(@Valid @RequestBody DrinkCategoryRequest request) {
         return menuService.createCategory(request);
     }
 
     @PutMapping("/drink-categories/{id}")
     @Operation(summary = "Getraenkekategorie aktualisieren")
+    @ApiResponse(responseCode = "200", description = "Kategorie aktualisiert")
     public DrinkCategoryResponse updateCategory(@PathVariable Long id, @Valid @RequestBody DrinkCategoryRequest request) {
         return menuService.updateCategory(id, request);
     }
@@ -57,12 +63,14 @@ public class MenuController {
     @DeleteMapping("/drink-categories/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @Operation(summary = "Getraenkekategorie loeschen")
+    @ApiResponse(responseCode = "204", description = "Kategorie geloescht")
     public void deleteCategory(@PathVariable Long id) {
         menuService.deleteCategory(id);
     }
 
     @GetMapping("/drinks")
     @Operation(summary = "Getraenke auflisten")
+    @ApiResponse(responseCode = "200", description = "Getraenke geladen")
     public List<DrinkResponse> listDrinks() {
         return menuService.listDrinks();
     }
@@ -70,12 +78,14 @@ public class MenuController {
     @PostMapping("/drinks")
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Getraenk anlegen")
+    @ApiResponse(responseCode = "201", description = "Getraenk erstellt")
     public DrinkResponse createDrink(@Valid @RequestBody DrinkRequest request) {
         return menuService.createDrink(request);
     }
 
     @PutMapping("/drinks/{id}")
     @Operation(summary = "Getraenk aktualisieren")
+    @ApiResponse(responseCode = "200", description = "Getraenk aktualisiert")
     public DrinkResponse updateDrink(@PathVariable Long id, @Valid @RequestBody DrinkRequest request) {
         return menuService.updateDrink(id, request);
     }
@@ -83,12 +93,14 @@ public class MenuController {
     @DeleteMapping("/drinks/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @Operation(summary = "Getraenk loeschen")
+    @ApiResponse(responseCode = "204", description = "Getraenk geloescht")
     public void deleteDrink(@PathVariable Long id) {
         menuService.deleteDrink(id);
     }
 
     @GetMapping("/drink-variants")
     @Operation(summary = "Getraenkevarianten auflisten")
+    @ApiResponse(responseCode = "200", description = "Varianten geladen")
     public List<DrinkVariantResponse> listVariants() {
         return menuService.listVariants();
     }
@@ -96,12 +108,14 @@ public class MenuController {
     @PostMapping("/drink-variants")
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Getraenkevariante anlegen")
+    @ApiResponse(responseCode = "201", description = "Variante erstellt")
     public DrinkVariantResponse createVariant(@Valid @RequestBody DrinkVariantRequest request) {
         return menuService.createVariant(request);
     }
 
     @PutMapping("/drink-variants/{id}")
     @Operation(summary = "Getraenkevariante aktualisieren")
+    @ApiResponse(responseCode = "200", description = "Variante aktualisiert")
     public DrinkVariantResponse updateVariant(@PathVariable Long id, @Valid @RequestBody DrinkVariantRequest request) {
         return menuService.updateVariant(id, request);
     }
@@ -109,12 +123,14 @@ public class MenuController {
     @DeleteMapping("/drink-variants/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @Operation(summary = "Getraenkevariante loeschen")
+    @ApiResponse(responseCode = "204", description = "Variante geloescht")
     public void deleteVariant(@PathVariable Long id) {
         menuService.deleteVariant(id);
     }
 
     @GetMapping("/volume-prices")
     @Operation(summary = "Volumenpreise auflisten")
+    @ApiResponse(responseCode = "200", description = "Volumenpreise geladen")
     public List<VolumePriceResponse> listVolumePrices() {
         return menuService.listVolumePrices();
     }
@@ -122,12 +138,14 @@ public class MenuController {
     @PostMapping("/volume-prices")
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Volumenpreis anlegen oder aktualisieren")
+    @ApiResponse(responseCode = "201", description = "Volumenpreis erstellt oder aktualisiert")
     public VolumePriceResponse createVolumePrice(@Valid @RequestBody VolumePriceRequest request) {
         return menuService.createOrUpdateVolumePrice(request);
     }
 
     @PutMapping("/volume-prices/{volumeMl}")
     @Operation(summary = "Volumenpreis fuer eine ml-Groesse aktualisieren")
+    @ApiResponse(responseCode = "200", description = "Volumenpreis aktualisiert")
     public VolumePriceResponse updateVolumePrice(
             @PathVariable Integer volumeMl,
             @Valid @RequestBody VolumePriceUpdateRequest request
@@ -138,6 +156,7 @@ public class MenuController {
     @DeleteMapping("/volume-prices/{volumeMl}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @Operation(summary = "Volumenpreis fuer eine ml-Groesse loeschen")
+    @ApiResponse(responseCode = "204", description = "Volumenpreis geloescht")
     public void deleteVolumePrice(@PathVariable Integer volumeMl) {
         menuService.deleteVolumePrice(volumeMl);
     }
