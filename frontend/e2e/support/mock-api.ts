@@ -124,7 +124,11 @@ export async function mockFlowApis(page: Page, state: FlowState) {
   await page.route("**/api/drink-categories", async (route: Route) => {
     const method = route.request().method();
     if (method === "GET") {
-      await json(route, state.categories);
+      const sorted = [...state.categories].sort((a, b) => {
+        if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+        return a.name.localeCompare(b.name);
+      });
+      await json(route, sorted);
       return;
     }
     if (method === "POST") {
@@ -139,6 +143,34 @@ export async function mockFlowApis(page: Page, state: FlowState) {
       await json(route, created, 201);
       return;
     }
+    await route.fallback();
+  });
+
+  await page.route(/.*\/api\/drink-categories\/(\d+)$/, async (route: Route) => {
+    const method = route.request().method();
+    const categoryId = Number(route.request().url().split("/").pop());
+    const category = state.categories.find((entry) => entry.id === categoryId);
+
+    if (!category) {
+      await json(route, { message: "category-not-found" }, 404);
+      return;
+    }
+
+    if (method === "PUT") {
+      const body = (await route.request().postDataJSON()) as { name: string; sortOrder: number; active?: boolean };
+      category.name = body.name;
+      category.sortOrder = body.sortOrder;
+      category.active = body.active ?? category.active;
+      await json(route, { ...category });
+      return;
+    }
+
+    if (method === "DELETE") {
+      state.categories = state.categories.filter((entry) => entry.id !== categoryId);
+      await route.fulfill({ status: 204 });
+      return;
+    }
+
     await route.fallback();
   });
 

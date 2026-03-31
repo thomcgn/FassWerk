@@ -44,7 +44,9 @@ public class InventoryService {
 
     @Transactional(readOnly = true)
     public List<InventoryItemResponse> listItems() {
-        return inventoryItemRepository.findAllByOrderByNameAsc().stream().map(this::toItemResponse).toList();
+        return inventoryItemRepository.findByActiveTrue().stream()
+                .sorted((a, b) -> a.getName().compareToIgnoreCase(b.getName()))
+                .map(this::toItemResponse).toList();
     }
 
     @Transactional(readOnly = true)
@@ -71,8 +73,12 @@ public class InventoryService {
     @Transactional
     public void deleteItem(Long id) {
         InventoryItem item = findItem(id);
-        movementRepository.deleteByInventoryItemId(item.getId());
-        inventoryItemRepository.delete(item);
+        // Löse Verknüpfung zum Getränk auf statt zu löschen
+        // Dadurch wird im Bar Admin wieder die Warnung angezeigt
+        item.setLinkedDrink(null);
+        item.setLinkedDrinkVariant(null);
+        item.setActive(false);
+        inventoryItemRepository.save(item);
     }
 
     @Transactional

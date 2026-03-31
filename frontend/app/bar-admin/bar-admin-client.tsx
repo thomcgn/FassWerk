@@ -32,6 +32,7 @@ async function readError(response: Response, fallback: string) {
 }
 
 type EditMode = null
+  | { type: "category"; id: number; name: string; sortOrder: string }
   | { type: "drink"; id: number; name: string; categoryId: string; description: string }
   | { type: "variant"; id: number; drinkId: number; label: string; volumeMl: string; useStandardPrice: boolean; price: string; sku: string };
 
@@ -120,6 +121,7 @@ export default function BarAdminClient() {
   const [deletingCategory, setDeletingCategory] = useState(false);
   const [deleteDrinkModal, setDeleteDrinkModal] = useState<{ id: number; name: string } | null>(null);
   const [deletingDrink, setDeletingDrink] = useState(false);
+  const [activeDrinkCategoryTabId, setActiveDrinkCategoryTabId] = useState<number | null>(null);
 
   useToastFeedback(error, "error");
   useToastFeedback(status, "success");
@@ -181,6 +183,7 @@ export default function BarAdminClient() {
     setDrinkCategoryId((current) => current || String(categoriesPayload[0]?.id ?? ""));
     setVariantDrinkId((current) => current || String(drinksPayload[0]?.id ?? ""));
     setSelectedVolumeMlForAdjust((current) => current || String(volumePricesPayload[0]?.volumeMl ?? ""));
+    setActiveDrinkCategoryTabId((current) => current || (categoriesPayload[0]?.id ?? null));
   }, []);
 
   useEffect(() => {
@@ -485,6 +488,43 @@ export default function BarAdminClient() {
     setDeletingCategory(false);
   }
 
+  async function updateCategory() {
+    if (!editMode || editMode.type !== "category") return;
+    setError(null);
+    setStatus(null);
+
+    const trimmedName = editMode.name.trim();
+    if (!trimmedName) {
+      setError("Bitte einen Kategorienamen eingeben.");
+      return;
+    }
+
+    const parsedSortOrder = Number(editMode.sortOrder.trim().replace(",", "."));
+    if (!Number.isInteger(parsedSortOrder) || parsedSortOrder < 0) {
+      setError("Sortierung muss eine ganze Zahl >= 0 sein.");
+      return;
+    }
+
+    const response = await fetch(`/api/drink-categories/${editMode.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: trimmedName,
+        sortOrder: parsedSortOrder,
+        active: true,
+      }),
+    });
+
+    if (!response.ok) {
+      setError(await readError(response, "Kategorie konnte nicht aktualisiert werden."));
+      return;
+    }
+
+    setEditMode(null);
+    setStatus("Kategorie aktualisiert.");
+    await loadAll();
+  }
+
   async function deleteVariant(id: number) {
     if (!confirm("Diese Variante wirklich löschen?")) return;
     setError(null);
@@ -669,16 +709,26 @@ export default function BarAdminClient() {
           <CardContent className="space-y-4">
             <div className="space-y-2.5">
               <Label>Name</Label>
-              <Input value={categoryName} onChange={(event) => setCategoryName(event.target.value)} placeholder="z. B. Weine" />
+              <Input
+                data-testid="category-create-name"
+                value={categoryName}
+                onChange={(event) => setCategoryName(event.target.value)}
+                placeholder="z. B. Weine"
+              />
             </div>
             <div className="space-y-2.5">
               <Label>Sortierung</Label>
-              <Input type="number" value={categorySortOrder} onChange={(event) => setCategorySortOrder(event.target.value)} />
+              <Input
+                data-testid="category-create-sort-order"
+                type="number"
+                value={categorySortOrder}
+                onChange={(event) => setCategorySortOrder(event.target.value)}
+              />
               <p className={`text-xs ${isCategorySortOrderValid ? "text-[color:var(--color-muted-foreground)]" : "text-amber-200"}`}>
                 Ganze Zahl ab 0 (z. B. 10, 20, 30).
               </p>
             </div>
-            <Button className="w-full" onClick={() => void createCategory()} disabled={!canCreateCategory}>
+            <Button data-testid="category-create-save" className="w-full" onClick={() => void createCategory()} disabled={!canCreateCategory}>
               <PlusCircle className="h-4 w-4" />Kategorie speichern
             </Button>
           </CardContent>
@@ -891,7 +941,7 @@ export default function BarAdminClient() {
           <Card>
             <CardHeader>
               <CardTitle className="text-xl">Kategorien verwalten</CardTitle>
-              <CardDescription>Bestehende Kategorien löschen.</CardDescription>
+              <CardDescription>Bestehende Kategorien bearbeiten oder löschen.</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
@@ -904,13 +954,29 @@ export default function BarAdminClient() {
                         <p className="font-semibold text-[color:var(--color-foreground)]">{category.name}</p>
                         <p className="text-sm text-[color:var(--color-muted-foreground)]">Sortierung: {category.sortOrder}</p>
                       </div>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => setDeleteCategoryModal({ id: category.id, name: category.name })}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          aria-label={`Kategorie ${category.name} bearbeiten`}
+                          data-testid={`category-edit-open-${category.id}`}
+                          onClick={() => setEditMode({
+                            type: "category",
+                            id: category.id,
+                            name: category.name,
+                            sortOrder: String(category.sortOrder),
+                          })}
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => setDeleteCategoryModal({ id: category.id, name: category.name })}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
                   ))
                 )}
@@ -935,43 +1001,69 @@ export default function BarAdminClient() {
                   </div>
                 </div>
               ) : null}
-              <div className="space-y-3">
-                {drinks.length === 0 ? (
-                  <p className="text-sm text-[color:var(--color-muted-foreground)]">Keine Getränke vorhanden.</p>
-                ) : (
-                  drinks.map((drink) => {
-                    const category = categories.find((c) => c.id === drink.categoryId);
-                    const hasInventoryLink = inventoryItems.some((item) => item.linkedDrinkId === drink.id);
-                    return (
-                      <div key={drink.id} className="flex items-start justify-between gap-3 rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-4">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <p className="font-semibold text-[color:var(--color-foreground)]">{drink.name}</p>
-                            {!hasInventoryLink && (
-                              <Badge variant="destructive" className="flex gap-1 items-center">
-                                <AlertCircle className="h-3 w-3" />Kein Lager
-                              </Badge>
-                            )}
-                          </div>
-                          <p className="text-sm text-[color:var(--color-muted-foreground)]">{category?.name ?? "?"} {drink.description ? `· ${drink.description}` : ""}</p>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button size="sm" variant="secondary" onClick={() => setEditMode({ type: "drink", id: drink.id, name: drink.name, categoryId: String(drink.categoryId), description: drink.description || "" })}>
-                            <Edit2 className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => setDeleteDrinkModal({ id: drink.id, name: drink.name })}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
+
+              {categories.length === 0 ? (
+                <p className="text-sm text-[color:var(--color-muted-foreground)]">Keine Kategorien vorhanden.</p>
+              ) : (
+                <>
+                  <div className="mb-4 flex flex-wrap gap-2 border-b border-cyan-500/20 pb-3">
+                    {categories.map((category) => (
+                      <button
+                        key={category.id}
+                        data-testid={`drink-category-tab-${category.id}`}
+                        onClick={() => setActiveDrinkCategoryTabId(category.id)}
+                        className={`px-4 py-2 rounded-t-lg border-b-2 transition-all ${
+                          activeDrinkCategoryTabId === category.id
+                            ? "border-cyan-400 bg-cyan-500/10 text-cyan-100 font-semibold"
+                            : "border-transparent bg-transparent text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]"
+                        }`}
+                      >
+                        {category.name}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="space-y-3">
+                    {drinks.filter((d) => d.categoryId === activeDrinkCategoryTabId).length === 0 ? (
+                      <p className="text-sm text-[color:var(--color-muted-foreground)]">Keine Getränke in dieser Kategorie vorhanden.</p>
+                    ) : (
+                      drinks
+                        .filter((d) => d.categoryId === activeDrinkCategoryTabId)
+                        .map((drink) => {
+                          const category = categories.find((c) => c.id === drink.categoryId);
+                          const hasInventoryLink = inventoryItems.some((item) => item.linkedDrinkId === drink.id);
+                          return (
+                            <div key={drink.id} className="flex items-start justify-between gap-3 rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-4">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2">
+                                  <p className="font-semibold text-[color:var(--color-foreground)]">{drink.name}</p>
+                                  {!hasInventoryLink && (
+                                    <Badge variant="destructive" className="flex gap-1 items-center">
+                                      <AlertCircle className="h-3 w-3" />Kein Lager
+                                    </Badge>
+                                  )}
+                                </div>
+                                <p className="text-sm text-[color:var(--color-muted-foreground)]">{category?.name ?? "?"} {drink.description ? `· ${drink.description}` : ""}</p>
+                              </div>
+                              <div className="flex gap-2">
+                                <Button size="sm" variant="secondary" onClick={() => setEditMode({ type: "drink", id: drink.id, name: drink.name, categoryId: String(drink.categoryId), description: drink.description || "" })}>
+                                  <Edit2 className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => setDeleteDrinkModal({ id: drink.id, name: drink.name })}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          );
+                        })
+                    )}
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
 
@@ -1022,16 +1114,50 @@ export default function BarAdminClient() {
       </div>
 
       {editMode ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          data-testid={editMode.type === "category" ? "category-edit-modal" : undefined}
+        >
           <Card className="w-full max-w-md">
             <CardHeader className="flex flex-row items-center justify-between gap-2">
-              <CardTitle>{editMode.type === "drink" ? "Getränk bearbeiten" : "Variante bearbeiten"}</CardTitle>
+              <CardTitle>
+                {editMode.type === "category"
+                  ? "Kategorie bearbeiten"
+                  : editMode.type === "drink"
+                    ? "Getränk bearbeiten"
+                    : "Variante bearbeiten"}
+              </CardTitle>
               <button onClick={() => setEditMode(null)} className="text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]">
                 <X className="h-5 w-5" />
               </button>
             </CardHeader>
             <CardContent className="space-y-4">
-              {editMode.type === "drink" ? (
+              {editMode.type === "category" ? (
+                <>
+                  <div className="space-y-2">
+                    <Label>Name</Label>
+                    <Input
+                      data-testid="category-edit-name"
+                      value={editMode.name}
+                      onChange={(e) => setEditMode({ ...editMode, name: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Sortierung</Label>
+                    <Input
+                      data-testid="category-edit-sort-order"
+                      type="number"
+                      min="0"
+                      value={editMode.sortOrder}
+                      onChange={(e) => setEditMode({ ...editMode, sortOrder: e.target.value })}
+                    />
+                  </div>
+                  <div className="flex gap-2 pt-4">
+                    <Button data-testid="category-edit-save" className="flex-1" onClick={() => void updateCategory()}>Speichern</Button>
+                    <Button className="flex-1" variant="outline" onClick={() => setEditMode(null)}>Abbrechen</Button>
+                  </div>
+                </>
+              ) : editMode.type === "drink" ? (
                 <>
                   <div className="space-y-2">
                     <Label>Kategorie</Label>

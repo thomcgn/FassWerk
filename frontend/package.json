@@ -10,7 +10,7 @@
     "lint:report": "eslint . -f json -o reports/eslint-report.json",
     "test:e2e": "playwright test",
     "test:e2e:ci": "E2E_FIXED_DATE=2026-03-20 E2E_FIXED_TIMESTAMP=2026-03-20T18:00:00.000Z playwright test --reporter=list,junit",
-    "test:e2e:critical": "playwright test e2e/reservation-lifecycle.spec.ts e2e/table-billing-prerequisite-flow.spec.ts e2e/table-billing-split-payment.spec.ts e2e/inventory-deduction-order-events.spec.ts"
+    "test:e2e:critical": "playwright test e2e/reservation-lifecycle.spec.ts e2e/table-billing-prerequisite-flow.spec.ts e2e/table-billing-split-payment.spec.ts e2e/inventory-deduction-order-events.spec.ts e2e/bar-admin-categories.spec.ts e2e/bar-admin-drink-tabs.spec.ts"
   },
   "dependencies": {
     "@fullcalendar/daygrid": "^6.1.20",
