@@ -1,6 +1,8 @@
 package org.thomcgn.backend.inventory.service;
 
 import lombok.RequiredArgsConstructor;
+import org.thomcgn.backend.common.exception.BadRequestException;
+import java.time.DateTimeException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -62,7 +64,11 @@ public class SalesConfigurationService {
     public SalesConfigurationDto updateConfiguration(SalesConfigurationDto config) {
         InventoryBusinessSettings settings = getOrCreateSettings();
         if (config.businessTimezone() != null && !config.businessTimezone().isBlank()) {
-            settings.setBusinessTimezone(ZoneId.of(config.businessTimezone()).getId());
+            try {
+                settings.setBusinessTimezone(ZoneId.of(config.businessTimezone()).getId());
+            } catch (DateTimeException exception) {
+                throw new BadRequestException("Invalid business timezone");
+            }
         }
         if (config.businessDayEndsAt() != null) {
             settings.setBusinessDayEndsAt(config.businessDayEndsAt());

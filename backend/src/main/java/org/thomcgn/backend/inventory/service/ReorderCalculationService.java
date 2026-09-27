@@ -1,6 +1,7 @@
 package org.thomcgn.backend.inventory.service;
 
 import lombok.RequiredArgsConstructor;
+import org.thomcgn.backend.common.exception.NotFoundException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -154,6 +155,14 @@ public class ReorderCalculationService {
         return all.stream().limit(limit).toList();
     }
 
+    @Transactional(readOnly = true)
+    public Optional<ConsumptionMetadata> getConsumptionMetadata(Long inventoryItemId) {
+        if (!inventoryItemRepository.existsById(inventoryItemId)) {
+            throw new NotFoundException("Inventory item not found: " + inventoryItemId);
+        }
+        return consumptionMetadataRepository.findByInventoryItemId(inventoryItemId);
+    }
+
     /**
      * Creates or updates consumption metadata for an inventory item.
      */
@@ -167,7 +176,7 @@ public class ReorderCalculationService {
         } else {
             metadata = new ConsumptionMetadata();
             InventoryItem item = inventoryItemRepository.findById(inventoryItemId)
-                    .orElseThrow(() -> new IllegalArgumentException("Inventory item not found: " + inventoryItemId));
+                    .orElseThrow(() -> new NotFoundException("Inventory item not found: " + inventoryItemId));
             metadata.setInventoryItem(item);
         }
 

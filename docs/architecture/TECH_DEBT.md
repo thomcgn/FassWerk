@@ -157,3 +157,18 @@ Settlement sind eigenstaendige Verantwortungsbereiche.
 Keine Paket-Gesamtverschiebung, neue Dependency, neue Flyway-Migration, Event-Bus-
 Einfuehrung oder REST-Vertragsaenderung. Details und Gate-Ergebnisse:
 [PHASE_4_REPORT.md](PHASE_4_REPORT.md).
+
+## Fortschritt nach Phase 5 (2026-09-27)
+
+| ID | Status nach Phase 5 |
+| --- | --- |
+| TD-019 | Behoben fuer die identifizierten HTTP-Pfade: Inventory-DTOs werden innerhalb InventoryInsightsApplicationService-Transaktionen abgebildet; drei ReorderOrderService-Listen besitzen read-only-Transaktionen. Echte HTTP-Tests mit PostgreSQL und OSIV=false reproduzierten zuvor 500 und pruefen jetzt geladene Relationsdaten. N+1-Optimierung bleibt offen. |
+| TD-021 | Behoben: Verbrauchsmetadaten werden gelesen und nach Update wieder ausgegeben; fehlende Metadaten bleiben leeres 200, fehlender Artikel 404. Berechnung ohne Variante ist null-sicher. |
+| TD-028 | MVC-seitig verbessert: konsistentes bestehendes JSON-Envelope, korrekte 400/404/405/415 und generischer Constraint-Konflikt 409; keine Parser-/SQLdetails. Security-Filter und Next-Adapter bleiben Phasen 6/10. Keine stille RFC-9457-Migration. |
+| TD-026 | InventoryController-Orchestrierung/Entity-Mapping in Inventory-Use-Case-Fassade verlagert. Alle neun Controller geprueft; keine direkten Repository-/Transaktionsaufrufe oder Entity-Responses. Uebrige Servicekopplungen bleiben offen. |
+| TD-023 | Neue HTTP-Contracttests fuer Fehler, Lazy-Mapping, Metadaten und Nullpfade sowie isolierte Request-ID-Filtertests. Domaininvarianten/Rollenmatrix sind damit nicht vollstaendig abgedeckt. |
+| TD-034 | Request-ID-Zeichensatz und Laenge begrenzt; MDC-Cleanup und Header/Attribut-Korrelation getestet. Monitoring/strukturierte Logs bleiben offen. |
+| TD-006 / TD-007 / TD-008 / TD-020 / TD-025 | Nicht behoben: Rollenluecken, Refresh-Replay/Parallelitaet, ignorierte numerische Konfigurationsfelder und sensible DEBUG-Logs/fehlendes Serverfehlerlogging. JWT-Parserfehler werden jetzt korrekt als Eingabefehler behandelt, nicht als Loesung der Token-Policy behauptet. |
+
+Details: [API_LAYER_REVIEW.md](API_LAYER_REVIEW.md),
+[PHASE_5_REPORT.md](PHASE_5_REPORT.md). Keine neuen Dependencies oder Migrationen.

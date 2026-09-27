@@ -32,14 +32,8 @@ import org.thomcgn.backend.inventory.api.dto.ReorderCalculationResponse;
 import org.thomcgn.backend.inventory.api.dto.ReorderSuggestionResponse;
 import org.thomcgn.backend.inventory.api.dto.SalesConfigurationRequest;
 import org.thomcgn.backend.inventory.api.dto.SalesConfigurationResponse;
-import org.thomcgn.backend.inventory.domain.ConsumptionMetadata;
-import org.thomcgn.backend.inventory.domain.DrinkSalesDaily;
-import org.thomcgn.backend.inventory.domain.DrinkSalesWeekly;
-import org.thomcgn.backend.inventory.domain.ReorderCalculation;
-import org.thomcgn.backend.inventory.service.DrinkSalesTrackingService;
 import org.thomcgn.backend.inventory.service.InventoryService;
-import org.thomcgn.backend.inventory.service.ReorderCalculationService;
-import org.thomcgn.backend.inventory.service.SalesConfigurationService;
+import org.thomcgn.backend.inventory.service.InventoryInsightsApplicationService;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -52,9 +46,7 @@ import java.util.List;
 public class InventoryController {
 
     private final InventoryService inventoryService;
-    private final DrinkSalesTrackingService drinkSalesTrackingService;
-    private final ReorderCalculationService reorderCalculationService;
-    private final SalesConfigurationService salesConfigurationService;
+    private final InventoryInsightsApplicationService insights;
 
     @GetMapping
     @Operation(summary = "Lagerartikel auflisten")
@@ -137,18 +129,7 @@ public class InventoryController {
             @RequestParam LocalDate startDate,
             @RequestParam LocalDate endDate
     ) {
-        return drinkSalesTrackingService.getDailySales(startDate, endDate).stream()
-                .map(daily -> new DrinkSalesDailyResponse(
-                        daily.getId(),
-                        daily.getDrink().getId(),
-                        daily.getDrink().getName(),
-                        daily.getDrinkVariant() != null ? daily.getDrinkVariant().getId() : null,
-                        daily.getDrinkVariant() != null ? daily.getDrinkVariant().getDisplayVolumeName() : null,
-                        daily.getSaleDate(),
-                        daily.getQuantitySold(),
-                        daily.getVolumeSoldMl()
-                ))
-                .toList();
+        return insights.getDailySales(startDate, endDate);
     }
 
     @GetMapping("/sales/weekly/{variantId}")
@@ -158,20 +139,7 @@ public class InventoryController {
             @PathVariable Long variantId,
             @RequestParam(defaultValue = "4") Integer weeks
     ) {
-        return drinkSalesTrackingService.getRecentWeeklySales(variantId, weeks).stream()
-                .map(weekly -> new DrinkSalesWeeklyResponse(
-                        weekly.getId(),
-                        weekly.getDrink().getId(),
-                        weekly.getDrink().getName(),
-                        weekly.getDrinkVariant() != null ? weekly.getDrinkVariant().getId() : null,
-                        weekly.getDrinkVariant() != null ? weekly.getDrinkVariant().getDisplayVolumeName() : null,
-                        weekly.getWeekStartDate(),
-                        weekly.getQuantitySold(),
-                        weekly.getVolumeSoldMl(),
-                        weekly.getAverageDailyQuantity(),
-                        weekly.getAverageDailyVolumeMl()
-                ))
-                .toList();
+        return insights.getWeeklySales(variantId, weeks);
     }
 
     // === Reorder Calculation Endpoints ===
@@ -183,29 +151,21 @@ public class InventoryController {
             @ApiResponse(responseCode = "404", description = "Lagerartikel nicht gefunden")
     })
     public ReorderCalculationResponse getLatestReorderCalculation(@PathVariable Long id) {
-        return reorderCalculationService.getLatestCalculation(id)
-                .map(this::toReorderCalculationResponse)
-                .orElse(null);
+        return insights.getLatestReorderCalculation(id);
     }
 
     @PostMapping("/{id}/calculate-reorder")
     @Operation(summary = "Nachbestellberechnung fuer Lagerartikel sofort ausfuehren")
     @ApiResponse(responseCode = "200", description = "Berechnung ausgefuehrt")
     public ReorderCalculationResponse calculateReorder(@PathVariable Long id) {
-        var item = inventoryService.getItem(id);
-        ReorderCalculation calculation = reorderCalculationService.calculateReorderAmount(
-                inventoryService.findInventoryItemById(id)
-        );
-        return toReorderCalculationResponse(calculation);
+        return insights.calculateReorder(id);
     }
 
     @GetMapping("/reorder-calculations/below-threshold")
     @Operation(summary = "Artikel unter Schwellwert abrufen")
     @ApiResponse(responseCode = "200", description = "Artikel unter Schwellwert geladen")
     public List<ReorderCalculationResponse> getItemsBelowThreshold() {
-        return reorderCalculationService.getItemsBelowThreshold().stream()
-                .map(this::toReorderCalculationResponse)
-                .toList();
+        return insights.getItemsBelowThreshold();
     }
 
     @GetMapping("/{id}/reorder-calculations/history")
@@ -215,20 +175,16 @@ public class InventoryController {
             @PathVariable Long id,
             @RequestParam(defaultValue = "10") int limit
     ) {
-        return reorderCalculationService.getCalculationHistory(id, limit).stream()
-                .map(this::toReorderCalculationResponse)
-                .toList();
+        return insights.getReorderCalculationHistory(id, limit);
     }
 
     // === Consumption Metadata Endpoints ===
 
     @GetMapping("/{id}/consumption-metadata")
     @Operation(summary = "Verbrauchsmetadaten fuer Lagerartikel abrufen")
-    @ApiResponse(responseCode = "501", description = "Noch nicht implementiert (Placeholder)")
+    @ApiResponse(responseCode = "200", description = "Metadaten geladen oder leer bei fehlender Konfiguration")
     public ConsumptionMetadataResponse getConsumptionMetadata(@PathVariable Long id) {
-        // Note: This endpoint assumes the service can fetch it
-        // You may need to add a method to ReorderCalculationService to retrieve it
-        return null; // Placeholder - to be implemented based on requirements
+        return insights.getConsumptionMetadata(id);
     }
 
     @PutMapping("/{id}/consumption-metadata")
@@ -238,39 +194,7 @@ public class InventoryController {
             @PathVariable Long id,
             @Valid @RequestBody ConsumptionMetadataRequest request
     ) {
-        ConsumptionMetadata metadata = reorderCalculationService.updateConsumptionMetadata(
-                id,
-                request.leadTimeDays(),
-                request.safetyStockFactor(),
-                request.weeksLookback()
-        );
-        return toConsumptionMetadataResponse(metadata);
-    }
-
-    // === Helper Methods ===
-
-    private ReorderCalculationResponse toReorderCalculationResponse(ReorderCalculation calc) {
-        return new ReorderCalculationResponse(
-                calc.getId(),
-                calc.getInventoryItem().getId(),
-                calc.getInventoryItem().getName(),
-                calc.getCalculationDate(),
-                calc.getCurrentStockAmount(),
-                calc.getWeeklyAverageConsumption(),
-                calc.getRecommendedReorderAmount(),
-                calc.isBelowThreshold(),
-                calc.getWeeksUntilStockout()
-        );
-    }
-
-    private ConsumptionMetadataResponse toConsumptionMetadataResponse(ConsumptionMetadata metadata) {
-        return new ConsumptionMetadataResponse(
-                metadata.getId(),
-                metadata.getInventoryItem().getId(),
-                metadata.getLeadTimeDays(),
-                metadata.getSafetyStockFactor(),
-                metadata.getWeeksLookback()
-        );
+        return insights.updateConsumptionMetadata(id, request);
     }
 
     // === Configuration Endpoints ===
@@ -279,16 +203,7 @@ public class InventoryController {
     @Operation(summary = "Globale Sales-/Business-Day-Konfiguration laden")
     @ApiResponse(responseCode = "200", description = "Konfiguration geladen")
     public SalesConfigurationResponse getConfiguration() {
-        var config = salesConfigurationService.getConfiguration();
-        return new SalesConfigurationResponse(
-                config.weeksLookback(),
-                config.defaultSafetyFactor(),
-                config.defaultLeadTimeDays(),
-                config.businessTimezone(),
-                config.businessDayEndsAt(),
-                config.manualBusinessDate(),
-                salesConfigurationService.getCurrentBusinessDate()
-        );
+        return insights.getConfiguration();
     }
 
     @PutMapping("/configuration")
@@ -297,39 +212,14 @@ public class InventoryController {
     public SalesConfigurationResponse updateConfiguration(
             @Valid @RequestBody SalesConfigurationRequest request
     ) {
-        var config = salesConfigurationService.updateConfiguration(new SalesConfigurationService.SalesConfigurationDto(
-                request.weeksLookback(),
-                request.defaultSafetyFactor(),
-                request.defaultLeadTimeDays(),
-                request.businessTimezone(),
-                request.businessDayEndsAt(),
-                request.manualBusinessDate()
-        ));
-        return new SalesConfigurationResponse(
-                config.weeksLookback(),
-                config.defaultSafetyFactor(),
-                config.defaultLeadTimeDays(),
-                config.businessTimezone(),
-                config.businessDayEndsAt(),
-                config.manualBusinessDate(),
-                salesConfigurationService.getCurrentBusinessDate()
-        );
+        return insights.updateConfiguration(request);
     }
 
     @PostMapping("/configuration/manual-day-close")
     @Operation(summary = "Geschaeftstag manuell abschliessen")
     @ApiResponse(responseCode = "200", description = "Geschaeftstag abgeschlossen")
     public SalesConfigurationResponse closeBusinessDayManually() {
-        var config = salesConfigurationService.closeBusinessDayManually();
-        return new SalesConfigurationResponse(
-                config.weeksLookback(),
-                config.defaultSafetyFactor(),
-                config.defaultLeadTimeDays(),
-                config.businessTimezone(),
-                config.businessDayEndsAt(),
-                config.manualBusinessDate(),
-                salesConfigurationService.getCurrentBusinessDate()
-        );
+        return insights.closeBusinessDayManually();
     }
 }
 

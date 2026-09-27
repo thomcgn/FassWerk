@@ -280,3 +280,21 @@ Transaktionskontext teil. Keine neue Eventual Consistency, keine Schema-/REST-Ae
 - Phase 5 bearbeitet Controller/API-Grenzen; Phasen 6/7/8 bearbeiten die dokumentierten
   Auth-/Reservation-/Billing-Invarianten. TD-004 und die fuenf Konkurrenzdefekte bleiben
   offen. Keine globale Paketverschiebung und kein Microservice-Umbau in Phase 4.
+
+## Phase-5-Fortschritt: REST-/Use-Case-Grenze
+
+InventoryInsightsApplicationService gehoert ausschliesslich zu Inventory. Er besitzt
+die Orchestrierung und transaktionale DTO-Abbildung der Tages-/Wochenverkaeufe,
+Nachbestellberechnungen, Verbrauchsmetadaten und Business-Konfiguration.
+InventoryController bleibt HTTP-/Auth-Adapter; Berechnungsformeln bleiben in den
+vorhandenen fachlichen Services. Die drei lesenden ReorderOrderService-Listen
+behalten ihren Owner Inventory und mappen innerhalb read-only-Transaktionen.
+
+GlobalExceptionHandler und RequestCorrelationFilter sind technische Webadapter,
+keine neue Domaene. AuthService uebersetzt lediglich ungueltige JWT-Parsergebnisse
+in kuratierte Eingabefehler; Security-Policy/Rotation bleiben Identity & Access.
+Neue DTO-Constraints gehoeren zum Inventory-API-Vertrag.
+
+Keine neue kontextuebergreifende Entity- oder Repositoryabhaengigkeit eingefuehrt.
+Details zu allen neun Controllern, Erfolgscodes und bewusst beibehaltenem
+Fehlerformat: [API_LAYER_REVIEW.md](API_LAYER_REVIEW.md).

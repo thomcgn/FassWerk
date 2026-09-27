@@ -1,23 +1,34 @@
 package org.thomcgn.backend.inventory.api.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalTime;
 
 public record ReorderOrderRequest(
+    @NotNull
+    @Positive
     @JsonProperty("inventoryItemId")
     Long inventoryItemId,
 
+    @NotNull
+    @Positive
     @JsonProperty("supplierId")
     Long supplierId,
 
+    @NotNull
+    @Positive
     @JsonProperty("orderedQuantity")
     BigDecimal orderedQuantity,
 
+    @NotBlank
     @JsonProperty("orderedUnit")
     String orderedUnit,
 
+    @NotNull
     @JsonProperty("scheduledDeliveryDate")
     LocalDate scheduledDeliveryDate,
 

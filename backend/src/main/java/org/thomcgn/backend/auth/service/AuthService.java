@@ -1,6 +1,7 @@
 package org.thomcgn.backend.auth.service;
 
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtException;
 import lombok.extern.slf4j.Slf4j;
 import lombok.RequiredArgsConstructor;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -185,7 +186,12 @@ public class AuthService {
     }
 
     private Claims parseAndValidateRefreshClaims(String refreshToken) {
-        Claims claims = jwtTokenService.parseToken(refreshToken);
+        Claims claims;
+        try {
+            claims = jwtTokenService.parseToken(refreshToken);
+        } catch (JwtException | IllegalArgumentException exception) {
+            throw new BadRequestException("Invalid refresh token");
+        }
         String tokenType = claims.get(JwtTokenService.CLAIM_TOKEN_TYPE, String.class);
         if (!JwtTokenService.TOKEN_TYPE_REFRESH.equals(tokenType)) {
             throw new BadRequestException("Invalid refresh token");

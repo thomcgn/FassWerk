@@ -21,7 +21,7 @@ public class RequestCorrelationFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
         String requestId = request.getHeader(REQUEST_ID_HEADER);
-        if (requestId == null || requestId.isBlank()) {
+        if (requestId == null || !requestId.matches("[A-Za-z0-9._-]{1,128}")) {
             requestId = UUID.randomUUID().toString();
         }
 

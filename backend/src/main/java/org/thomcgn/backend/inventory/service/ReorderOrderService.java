@@ -1,6 +1,7 @@
 package org.thomcgn.backend.inventory.service;
 
 import lombok.RequiredArgsConstructor;
+import org.thomcgn.backend.common.exception.BadRequestException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,7 +18,6 @@ import org.thomcgn.backend.inventory.repository.ReorderOrderRepository;
 import org.thomcgn.backend.inventory.repository.SupplierRepository;
 
 import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 @Slf4j
@@ -94,16 +94,19 @@ public class ReorderOrderService {
         return toReorderOrderResponse(saved);
     }
 
+    @Transactional(readOnly = true)
     public List<ReorderOrderResponse> getUpcomingDeliveries() {
         List<ReorderOrder> orders = reorderOrderRepository.findUpcomingDeliveries();
         return orders.stream().map(this::toReorderOrderResponse).toList();
     }
 
+    @Transactional(readOnly = true)
     public List<ReorderOrderResponse> getDeliveriesByDateRange(LocalDate startDate, LocalDate endDate) {
         List<ReorderOrder> orders = reorderOrderRepository.findByDateRange(startDate, endDate);
         return orders.stream().map(this::toReorderOrderResponse).toList();
     }
 
+    @Transactional(readOnly = true)
     public List<ReorderOrderResponse> getReordersByInventoryItem(Long inventoryItemId) {
         List<ReorderOrder> orders = reorderOrderRepository.findByInventoryItemIdOrderByScheduledDeliveryDateDesc(inventoryItemId);
         return orders.stream().map(this::toReorderOrderResponse).toList();
@@ -117,7 +120,7 @@ public class ReorderOrderService {
         try {
             order.setStatus(ReorderOrder.ReorderStatus.valueOf(newStatus.toUpperCase()));
         } catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException("Invalid status: " + newStatus);
+            throw new BadRequestException("Invalid reorder status");
         }
 
         ReorderOrder saved = reorderOrderRepository.save(order);

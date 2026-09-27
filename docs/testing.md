@@ -118,3 +118,25 @@ disable Ryuk.
 Frontend critical Playwright tests still mock API responses. They protect UI flows,
 not the live frontend/backend/PostgreSQL contract. See the phase report for separately
 executed npm installation, lint, build and browser checks.
+
+## HTTP-Vertraege (Phase 5)
+
+ApiContractIntegrationTest startet einen echten HTTP-Server mit PostgreSQL/Flyway,
+OSIV=false und synthetischem signiertem ADMIN-Token. Geprueft werden MVC-Fehlercodes,
+JSON-Envelope/Request-ID, unterdrueckte Parser-/SQL-/Tokeninformationen,
+Inventar-/Nachbestellungsantworten mit LAZY-Relationen, Verbrauchsmetadaten und
+leere Berechnungsergebnisse. Nur der gezielt ausgeloeste unerwartete 500 verwendet
+einen Service-Spy; Persistenz- und Mappingfaelle verwenden echte Services/Repositories.
+
+RequestCorrelationFilterTest prueft getrennt ungueltige/fehlende und gueltige
+Request-IDs sowie MDC-Cleanup. OpenApiIntegrationTest prueft weiterhin JSON und YAML.
+
+Gezielter Lauf:
+```bash
+cd backend
+./mvnw -B -Dtest=ApiContractIntegrationTest,RequestCorrelationFilterTest,OpenApiIntegrationTest clean test
+```
+
+Diese Tests ersetzen weder die Rollenmatrix (Phase 6), die bekannten
+Konkurrenz-Charakterisierungen noch einen echten Frontend-Backend-E2E-Vertrag.
+Die kritischen Playwright-Tests verwenden weiterhin API-Mocks.
