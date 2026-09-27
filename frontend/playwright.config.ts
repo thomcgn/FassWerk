@@ -6,7 +6,8 @@ export default defineConfig({
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  // The shared Next dev server compiles routes on demand; match CI to avoid contention.
+  workers: 1,
   reporter: [
     ["list"],
     ["junit", { outputFile: "test-results/playwright/results.xml" }],

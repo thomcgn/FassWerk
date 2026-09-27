@@ -7,6 +7,10 @@ import java.util.Optional;
 
 public interface AppUserRepository extends JpaRepository<AppUser, Long> {
 
+    Optional<AppUser> findByEmailIgnoreCase(String email);
+
+    boolean existsByRoleAndActiveTrue(org.thomcgn.backend.auth.domain.UserRole role);
+
     Optional<AppUser> findByEmailIgnoreCaseAndActiveTrue(String email);
 }
 

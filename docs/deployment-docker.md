@@ -6,6 +6,13 @@
 
 ## Build + Start
 
+Compose requires explicit `DB_USER`, `DB_PASSWORD` and `JWT_SECRET`; it has no
+credential defaults. Use the root `.env.example` as a template for a private `.env`
+and fill in private values before starting. The template deliberately cannot start
+an application unchanged. The backend runs with `prod`.
+See [configuration.md](configuration.md) for admin provisioning and migration V21.
+
+
 ```bash
 docker compose up -d --build
 ```

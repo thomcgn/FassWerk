@@ -23,9 +23,9 @@
         <jjwt.version>0.12.7</jjwt.version>
         <zxing.version>3.5.3</zxing.version>
         <pdfbox.version>3.0.4</pdfbox.version>
-        <flyway.url>jdbc:postgresql://localhost:5432/fasswerk</flyway.url>
-        <flyway.user>fasswerk</flyway.user>
-        <flyway.password>fasswerk</flyway.password>
+        <flyway.url>${env.DB_URL}</flyway.url>
+        <flyway.user>${env.DB_USER}</flyway.user>
+        <flyway.password>${env.DB_PASSWORD}</flyway.password>
         <flyway.locations>filesystem:src/main/resources/db/migration</flyway.locations>
     </properties>
 

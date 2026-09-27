@@ -33,7 +33,7 @@ test("bar-admin: kategorie nachtraeglich in name und sortierung bearbeiten", asy
 
   const updatedRow = page.locator("div", { hasText: "Bier Spezial" }).filter({ hasText: "Sortierung: 15" }).first();
   await expect(updatedRow).toBeVisible();
-  await expect(page.getByText("Kategorie aktualisiert.")).toBeVisible();
+  await expect(page.getByRole("main").getByText("Kategorie aktualisiert.")).toBeVisible();
 });
 
 test("bar-admin: kategorie-validierung greift bei leerem namen", async ({ page }) => {
@@ -49,7 +49,7 @@ test("bar-admin: kategorie-validierung greift bei leerem namen", async ({ page }
   await modal.getByTestId("category-edit-name").fill("   ");
   await modal.getByTestId("category-edit-save").click();
 
-  await expect(page.getByText("Bitte einen Kategorienamen eingeben.")).toBeVisible();
+  await expect(modal.getByText("Bitte einen Kategorienamen eingeben.")).toBeVisible();
   await expect(modal).toBeVisible();
 });
 
@@ -66,7 +66,7 @@ test("bar-admin: kategorie-validierung greift bei negativer sortierung", async (
   await modal.getByTestId("category-edit-sort-order").fill("-1");
   await modal.getByTestId("category-edit-save").click();
 
-  await expect(page.getByText("Sortierung muss eine ganze Zahl >= 0 sein.")).toBeVisible();
+  await expect(modal.getByText("Sortierung muss eine ganze Zahl >= 0 sein.")).toBeVisible();
   await expect(modal).toBeVisible();
 });
 
@@ -94,7 +94,7 @@ test("bar-admin: kategorie-bearbeitung zeigt konfliktmeldung bei 409", async ({ 
   await modal.getByTestId("category-edit-name").fill("Shots Premium");
   await modal.getByTestId("category-edit-save").click();
 
-  await expect(page.getByText("Ein Eintrag mit diesem Namen existiert bereits.")).toBeVisible();
+  await expect(modal.getByText("Ein Eintrag mit diesem Namen existiert bereits.")).toBeVisible();
   await expect(modal).toBeVisible();
 });
 

@@ -23,10 +23,12 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -176,18 +178,25 @@ class InventoryServiceUnitConversionTest {
     }
 
     @Test
-    void deleteItem_deletesMovementsBeforeInventoryItem() {
+    void deleteItem_deactivatesAndUnlinksItemWhilePreservingStockAndMovements() {
         InventoryItem item = createInventoryItem(ContentUnit.LITER, "10.00");
         item.setId(77L);
+        DrinkVariant variant = createVariant(2L);
+        item.setLinkedDrink(variant.getDrink());
+        item.setLinkedDrinkVariant(variant);
 
         when(inventoryItemRepository.findById(77L)).thenReturn(Optional.of(item));
 
         inventoryService.deleteItem(77L);
 
-        var inOrder = inOrder(movementRepository, inventoryItemRepository);
-        inOrder.verify(movementRepository).deleteByInventoryItemId(77L);
-        inOrder.verify(inventoryItemRepository).delete(item);
+        assertFalse(item.isActive());
+        assertNull(item.getLinkedDrink());
+        assertNull(item.getLinkedDrinkVariant());
+        assertEquals(new BigDecimal("10.00"), item.getTotalStockAmount());
         verify(inventoryItemRepository).findById(77L);
+        verify(inventoryItemRepository).save(item);
+        verifyNoMoreInteractions(inventoryItemRepository);
+        verifyNoInteractions(movementRepository);
     }
 
     private DrinkVariant createVariant(Long id) {

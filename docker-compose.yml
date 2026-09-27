@@ -4,15 +4,15 @@ services:
     container_name: fasswerk-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: fasswerk
-      POSTGRES_USER: fasswerk
-      POSTGRES_PASSWORD: fasswerk
+      POSTGRES_DB: ${DB_NAME:-fasswerk}
+      POSTGRES_USER: ${DB_USER:?Set DB_USER in your private environment}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in your private environment}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U fasswerk -d fasswerk"]
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -25,13 +25,16 @@ services:
     container_name: fasswerk-backend
     restart: unless-stopped
     environment:
-      DB_URL: jdbc:postgresql://postgres:5432/fasswerk
-      DB_USER: fasswerk
-      DB_PASSWORD: fasswerk
+      SPRING_PROFILES_ACTIVE: prod
+      DB_URL: jdbc:postgresql://postgres:5432/${DB_NAME:-fasswerk}
+      DB_USER: ${DB_USER:?Set DB_USER in your private environment}
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in your private environment}
       FLYWAY_CONNECT_RETRIES: 30
       FLYWAY_CONNECT_RETRIES_INTERVAL: 2s
-      QR_SCAN_BASE_URL: http://localhost:3000
-      JWT_SECRET: docker-dev-secret-change-me-please-at-least-32-chars
+      QR_SCAN_BASE_URL: ${QR_SCAN_BASE_URL:-http://localhost:3000}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+      JWT_SECRET: ${JWT_SECRET:?Set a private random JWT_SECRET}
       JWT_ISSUER: fasswerk-backend
       JWT_ACCESS_TOKEN_MINUTES: 120
       JWT_REFRESH_TOKEN_DAYS: 14

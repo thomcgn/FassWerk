@@ -2,18 +2,28 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ENV_FILE="$ROOT_DIR/.env"
+ENV_FILE="${FASSWERK_ENV_FILE:-$ROOT_DIR/.env}"
 ENV_EXAMPLE_FILE="$ROOT_DIR/.env.example"
 
 if [[ ! -f "$ENV_FILE" ]]; then
   echo "[INFO] Keine .env gefunden. Erstelle Vorlage aus .env.example"
-  cp "$ENV_EXAMPLE_FILE" "$ENV_FILE"
-  echo "[INFO] Bitte Werte in $ENV_FILE prüfen und erneut starten."
+  (umask 077; cp "$ENV_EXAMPLE_FILE" "$ENV_FILE")
+  echo "[INFO] Bitte Werte in $ENV_FILE pruefen und erneut starten."
+  exit 0
 fi
 
 set -a
 source "$ENV_FILE"
 set +a
+
+export SPRING_PROFILES_ACTIVE="${SPRING_PROFILES_ACTIVE:-dev}"
+if [[ "$SPRING_PROFILES_ACTIVE" != "dev" ]]; then
+  echo "[ERROR] run-local.sh ist nur fuer das dev-Profil vorgesehen."
+  exit 1
+fi
+export DB_URL="${DB_URL:-jdbc:postgresql://localhost:5432/fasswerk}"
+export DB_USER="${DB_USER:-fasswerk}"
+export DB_PASSWORD="${DB_PASSWORD:-fasswerk}"
 
 SERVER_PORT_EFFECTIVE="${SERVER_PORT:-8080}"
 

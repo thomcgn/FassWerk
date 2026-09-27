@@ -15,37 +15,37 @@ Spring Boot backend for reservation, menu, table billing, and transactional inve
 - Reorder suggestions API and PDF export endpoint
 - Actuator auth metrics (`/actuator/metrics/*`) and Prometheus endpoint (`/actuator/prometheus`)
 
-## Local run
-```bash
-./mvnw spring-boot:run
-```
+## Configuration and local run
 
-Empfohlen fuer reproduzierbares lokales Setup:
+See [configuration and secrets](../docs/configuration.md) for profiles, environment
+variables, initial admin provisioning and the migration of existing installations.
 
 ```bash
-cp .env.example .env
 ./scripts/run-local.sh
 ```
 
-Das Script laedt alle Variablen aus `.env` und startet das Backend konsistent mit diesen Werten.
+On first use this creates a private `.env` from `.env.example` and exits for review.
+On subsequent starts it loads that file and explicitly enables `dev`. Only this
+profile supplies local database defaults and a development-only signing key.
+The default profile and `prod` require explicit private DB credentials and JWT key.
+Do not use `dev` for deployed environments.
+
+For login on a fresh database, provide `BOOTSTRAP_ADMIN_EMAIL` and
+`BOOTSTRAP_ADMIN_PASSWORD` once, using a new email and a private password of at least
+16 characters (at most 72 UTF-8 bytes). Remove both variables after provisioning.
+The bootstrap never resets an existing account or adds another admin when an active
+administrator already exists.
 
 ## Test run
+
 ```bash
 ./mvnw test
+./mvnw verify
 ```
 
-## Required environment variables
-- `DB_URL` (default `jdbc:postgresql://localhost:5432/fasswerk`)
-- `DB_USER` (default `fasswerk`)
-- `DB_PASSWORD` (default `fasswerk`)
-- `QR_SCAN_BASE_URL` (default `http://localhost:8080`)
-- `JWT_SECRET` (default is dev-only fallback, set a strong secret in production)
-- `JWT_ISSUER` (default `fasswerk-backend`)
-- `JWT_ACCESS_TOKEN_MINUTES` (default `120`)
-- `JWT_REFRESH_TOKEN_DAYS` (default `14`)
-- `AUTH_CLEANUP_ENABLED` (default `true`)
-- `AUTH_CLEANUP_CRON` (default `0 */30 * * * *`)
-- `AUTH_CLEANUP_REFRESH_TOKENS` (default `true`)
+Tests explicitly use the `test` profile from `src/test/resources`. This profile
+and its H2 settings are not included in the production JAR. Combining `prod` with
+`dev` or `test` fails at startup.
 
 ## Actuator
 - `GET /actuator/health` is public
@@ -64,9 +64,12 @@ Versionierte OpenAPI lokal exportieren:
 
 In CI wird die Datei ebenfalls erzeugt und als Build-Artefakt abgelegt (siehe `.github/workflows/ci.yml`).
 
-## Seed users
-- Admin: `admin@fasswerk.local` / `ChangeMe123!`
-- Staff: `staff@fasswerk.local` / `StaffPass123!`
+## Legacy seed users
+
+Migration V21 disables accounts that still carry the published legacy seed password
+hashes and removes their refresh sessions. Accounts with already changed passwords
+are preserved. Do not edit V2 or restore the published seed credentials.
+See the upgrade procedure in [configuration.md](../docs/configuration.md).
 
 ## Auth endpoints
 - `POST /api/auth/login` -> access + refresh token
