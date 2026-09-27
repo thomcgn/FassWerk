@@ -138,3 +138,22 @@ nach erfolgreichem Download und YAML-Kopfpruefung atomar veroeffentlicht.
 Kein erfolgreicher GitHub-Lauf behauptet: Die Korrektur wird lokal mit echtem JAR,
 PostgreSQL und prod-Profil geprueft. Vollstaendige Frontend-/Release-/Image-Gates
 bleiben offen. Details und Pruefergebnisse: [CI_OPENAPI_FIX.md](CI_OPENAPI_FIX.md).
+
+## Fortschritt nach Phase 4 (2026-09-27)
+
+Die [Domain Map](DOMAIN_MAP.md) ordnet Entities/Aggregate, Value-Object-Luecken,
+Use Cases, Repositories, REST-Adapter, Eventkandidaten und Abhaengigkeiten acht
+fachlichen Kontexten zu. Administration ist eine Rollen-/UI-Sicht, keine neue
+Sammeldomaene; Ordering und Billing bleiben vorerst gemeinsam. Catalog und Shift
+Settlement sind eigenstaendige Verantwortungsbereiche.
+
+| ID | Status nach Phase 4 |
+| --- | --- |
+| TD-026 | Teilweise behoben: Report und Shift greifen nicht mehr direkt auf Billing-Entities/-Repositories zu. BillingRevenueQueries/PaidOrderRevenue bilden eine lesende Modulgrenze; BillingRevenueQueryService besitzt die Persistenzselektion. Zwei gezielte Architekturtests sichern die Grenze ab. Uebrige Fremd-Repositoryzugriffe und Schreibzyklen bleiben offen. |
+| TD-023 | Vier neue PostgreSQL-Integrationstests pruefen Umsatz-/Verbrauchsprojektionen, gespeicherte/leere Schichten, Zahlungs-/Statusfilter und Intervallgrenzen. Vor dem Umbau wurden bestehende Konsumenten durch Regressionstests charakterisiert. |
+| TD-013 | Nicht behoben: Summen nutzen [start,end), die bestehende Diagrammauswahl [start,end]. Die neue Schnittstelle benennt die inklusive Legacy-Grenze explizit; unterschiedliche Tages-/Business-Date-Modelle und N+1-Abfragen bleiben fachlich zu bereinigen. |
+| TD-004 / TD-008 | Unveraendert offen: Catalog-Loeschen kann bezahlte Positionen betreffen; fuenf reproduzierte Konkurrenzfehler werden durch die neue Lesegrenze nicht behoben. |
+
+Keine Paket-Gesamtverschiebung, neue Dependency, neue Flyway-Migration, Event-Bus-
+Einfuehrung oder REST-Vertragsaenderung. Details und Gate-Ergebnisse:
+[PHASE_4_REPORT.md](PHASE_4_REPORT.md).

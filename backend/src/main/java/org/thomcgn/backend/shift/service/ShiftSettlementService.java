@@ -3,8 +3,7 @@ package org.thomcgn.backend.shift.service;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.thomcgn.backend.billing.domain.TableOrderStatus;
-import org.thomcgn.backend.billing.repository.TableOrderItemRepository;
+import org.thomcgn.backend.billing.application.BillingRevenueQueries;
 import org.thomcgn.backend.shift.api.dto.ShiftSettlementRequest;
 import org.thomcgn.backend.shift.api.dto.ShiftSettlementResponse;
 import org.thomcgn.backend.shift.api.dto.ShiftWorkerEntryRequest;
@@ -27,7 +26,7 @@ import java.util.List;
 public class ShiftSettlementService {
 
     private final ShiftSettlementRepository settlementRepository;
-    private final TableOrderItemRepository tableOrderItemRepository;
+    private final BillingRevenueQueries billingRevenue;
 
     @Transactional(readOnly = true)
     public ShiftSettlementResponse getByDate(LocalDate date) {
@@ -137,8 +136,8 @@ public class ShiftSettlementService {
     private BigDecimal resolveDailyRevenue(LocalDate date) {
         LocalDateTime start = date.atStartOfDay();
         LocalDateTime end = date.plusDays(1).atStartOfDay();
-        return tableOrderItemRepository
-                .getRevenueByClosedRange(TableOrderStatus.CLOSED, start, end)
+        return billingRevenue
+                .revenue(start, end)
                 .setScale(2, RoundingMode.HALF_UP);
     }
 

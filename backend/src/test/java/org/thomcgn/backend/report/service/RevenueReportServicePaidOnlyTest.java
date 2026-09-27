@@ -5,10 +5,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.thomcgn.backend.billing.domain.TableOrder;
-import org.thomcgn.backend.billing.domain.TableOrderStatus;
-import org.thomcgn.backend.billing.repository.TableOrderItemRepository;
-import org.thomcgn.backend.billing.repository.TableOrderRepository;
+import org.thomcgn.backend.billing.application.BillingRevenueQueries;
+import org.thomcgn.backend.billing.application.PaidOrderRevenue;
 import org.thomcgn.backend.report.api.dto.RevenueOverviewResponse;
 
 import java.math.BigDecimal;
@@ -25,38 +23,24 @@ import static org.mockito.Mockito.when;
 class RevenueReportServicePaidOnlyTest {
 
     @Mock
-    private TableOrderRepository tableOrderRepository;
-
-    @Mock
-    private TableOrderItemRepository tableOrderItemRepository;
+    private BillingRevenueQueries billingRevenue;
 
     @InjectMocks
     private RevenueReportService revenueReportService;
 
     @Test
     void getOverview_aggregatesRevenueFromPaidOrdersOnly() {
-        TableOrder paidWeekOrder = new TableOrder();
-        paidWeekOrder.setId(11L);
-        paidWeekOrder.setStatus(TableOrderStatus.CLOSED);
-        paidWeekOrder.setPaid(true);
-        paidWeekOrder.setClosedAt(LocalDateTime.of(2026, 3, 23, 20, 0));
+        PaidOrderRevenue paidWeekOrder = new PaidOrderRevenue(
+                LocalDateTime.of(2026, 3, 23, 20, 0), new BigDecimal("40.00"));
+        PaidOrderRevenue paidMonthOrder = new PaidOrderRevenue(
+                LocalDateTime.of(2026, 3, 24, 21, 0), new BigDecimal("50.00"));
 
-        TableOrder paidMonthOrder = new TableOrder();
-        paidMonthOrder.setId(12L);
-        paidMonthOrder.setStatus(TableOrderStatus.CLOSED);
-        paidMonthOrder.setPaid(true);
-        paidMonthOrder.setClosedAt(LocalDateTime.of(2026, 3, 24, 21, 0));
-
-        when(tableOrderItemRepository.getRevenueByClosedRange(any(), any(), any()))
+        when(billingRevenue.revenue(any(), any()))
                 .thenReturn(new BigDecimal("10.00"), new BigDecimal("20.00"), new BigDecimal("30.00"));
-        when(tableOrderItemRepository.getConsumedVolumeMlByClosedRange(any(), any(), any()))
+        when(billingRevenue.consumedVolumeMl(any(), any()))
                 .thenReturn(new BigDecimal("500"), new BigDecimal("700"), new BigDecimal("900"));
-
-        when(tableOrderRepository.findAllByStatusAndPaidTrueAndClosedAtBetween(any(), any(), any()))
+        when(billingRevenue.paidOrdersClosedBetweenInclusive(any(), any()))
                 .thenReturn(List.of(paidWeekOrder), List.of(paidMonthOrder));
-
-        when(tableOrderItemRepository.getTotalByTableOrderId(11L)).thenReturn(new BigDecimal("40.00"));
-        when(tableOrderItemRepository.getTotalByTableOrderId(12L)).thenReturn(new BigDecimal("50.00"));
 
         RevenueOverviewResponse overview = revenueReportService.getOverview();
 
@@ -65,7 +49,7 @@ class RevenueReportServicePaidOnlyTest {
         assertEquals(new BigDecimal("30.00"), overview.monthRevenue());
         assertEquals("Montag", overview.strongestWeekday());
 
-        verify(tableOrderRepository, times(2)).findAllByStatusAndPaidTrueAndClosedAtBetween(any(), any(), any());
+        verify(billingRevenue, times(2)).paidOrdersClosedBetweenInclusive(any(), any());
     }
 }
 

@@ -56,6 +56,19 @@ complete verification gate.
 | OpenApiIntegrationTest | Anonymous JSON/YAML export over real HTTP, document content and media types |
 | SecretConfigurationTest | Configuration validation remains isolated; test profile also requires a DB password |
 
+## Module Boundary Regression Tests
+
+Phase 4 adds `RevenueBoundaryIntegrationTest` for Reporting/Shift consumers and the
+Billing revenue read contract, using the actual PostgreSQL schema. Timestamp-sensitive
+order fixtures use JPA to match the production Hibernate UTC binding. It explicitly
+preserves the legacy inclusive chart interval while aggregate intervals remain
+half-open; it does not claim the time model is already consistent.
+
+`BillingReadBoundaryTest` checks Report/Shift Java source references to Billing:
+only `billing.application` is exported to these consumers. This narrow static guard
+is not a full bytecode/runtime dependency analysis and does not hide the remaining
+Catalog/Inventory/Billing write cycles. See [Domain Map](architecture/DOMAIN_MAP.md).
+
 ## Concurrency Findings: Not Safety Guarantees
 
 The five `knownGap_*` tests deliberately characterize **existing faulty behavior**.

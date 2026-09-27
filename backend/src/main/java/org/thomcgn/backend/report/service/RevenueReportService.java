@@ -3,10 +3,8 @@ package org.thomcgn.backend.report.service;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.thomcgn.backend.billing.domain.TableOrder;
-import org.thomcgn.backend.billing.domain.TableOrderStatus;
-import org.thomcgn.backend.billing.repository.TableOrderItemRepository;
-import org.thomcgn.backend.billing.repository.TableOrderRepository;
+import org.thomcgn.backend.billing.application.BillingRevenueQueries;
+import org.thomcgn.backend.billing.application.PaidOrderRevenue;
 import org.thomcgn.backend.report.api.dto.RevenueDayPointResponse;
 import org.thomcgn.backend.report.api.dto.RevenueOverviewResponse;
 
@@ -19,15 +17,13 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
 public class RevenueReportService {
 
-    private final TableOrderRepository tableOrderRepository;
-    private final TableOrderItemRepository tableOrderItemRepository;
+    private final BillingRevenueQueries billingRevenue;
 
     @Transactional(readOnly = true)
     public RevenueOverviewResponse getOverview() {
@@ -42,14 +38,12 @@ public class RevenueReportService {
         BigDecimal weekConsumedMl = consumedMlForRange(weekStart.atStartOfDay(), today.plusDays(1).atStartOfDay());
         BigDecimal monthConsumedMl = consumedMlForRange(monthStart.atStartOfDay(), today.plusDays(1).atStartOfDay());
 
-        List<TableOrder> weekOrders = tableOrderRepository.findAllByStatusAndPaidTrueAndClosedAtBetween(
-                TableOrderStatus.CLOSED,
+        List<PaidOrderRevenue> weekOrders = billingRevenue.paidOrdersClosedBetweenInclusive(
                 weekStart.atStartOfDay(),
                 today.plusDays(1).atStartOfDay()
         );
 
-        List<TableOrder> monthOrders = tableOrderRepository.findAllByStatusAndPaidTrueAndClosedAtBetween(
-                TableOrderStatus.CLOSED,
+        List<PaidOrderRevenue> monthOrders = billingRevenue.paidOrdersClosedBetweenInclusive(
                 monthStart.atStartOfDay(),
                 today.plusDays(1).atStartOfDay()
         );
@@ -59,9 +53,9 @@ public class RevenueReportService {
             weekMap.put(day, BigDecimal.ZERO);
         }
 
-        for (TableOrder order : weekOrders) {
-            DayOfWeek day = order.getClosedAt().getDayOfWeek();
-            BigDecimal orderTotal = tableOrderItemRepository.getTotalByTableOrderId(order.getId());
+        for (PaidOrderRevenue order : weekOrders) {
+            DayOfWeek day = order.closedAt().getDayOfWeek();
+            BigDecimal orderTotal = order.total();
             weekMap.put(day, weekMap.get(day).add(orderTotal));
         }
 
@@ -87,11 +81,11 @@ public class RevenueReportService {
     }
 
     private BigDecimal sumForRange(LocalDateTime start, LocalDateTime end) {
-        return tableOrderItemRepository.getRevenueByClosedRange(TableOrderStatus.CLOSED, start, end);
+        return billingRevenue.revenue(start, end);
     }
 
     private BigDecimal consumedMlForRange(LocalDateTime start, LocalDateTime end) {
-        return tableOrderItemRepository.getConsumedVolumeMlByClosedRange(TableOrderStatus.CLOSED, start, end);
+        return billingRevenue.consumedVolumeMl(start, end);
     }
 
     private List<RevenueDayPointResponse> buildWeekPoints(Map<DayOfWeek, BigDecimal> weekMap) {
@@ -111,7 +105,7 @@ public class RevenueReportService {
         return points;
     }
 
-    private List<RevenueDayPointResponse> buildMonthPoints(List<TableOrder> monthOrders, LocalDate start, LocalDate end) {
+    private List<RevenueDayPointResponse> buildMonthPoints(List<PaidOrderRevenue> monthOrders, LocalDate start, LocalDate end) {
         Map<LocalDate, BigDecimal> dayMap = new java.util.LinkedHashMap<>();
         LocalDate cursor = start;
         while (!cursor.isAfter(end)) {
@@ -119,9 +113,9 @@ public class RevenueReportService {
             cursor = cursor.plusDays(1);
         }
 
-        for (TableOrder order : monthOrders) {
-            LocalDate day = order.getClosedAt().toLocalDate();
-            BigDecimal orderTotal = tableOrderItemRepository.getTotalByTableOrderId(order.getId());
+        for (PaidOrderRevenue order : monthOrders) {
+            LocalDate day = order.closedAt().toLocalDate();
+            BigDecimal orderTotal = order.total();
             dayMap.put(day, dayMap.getOrDefault(day, BigDecimal.ZERO).add(orderTotal));
         }
 
