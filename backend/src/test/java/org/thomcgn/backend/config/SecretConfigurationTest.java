@@ -60,6 +60,12 @@ class SecretConfigurationTest {
     }
 
     @Test
+    void testProfileRequiresDatabasePasswordToo() {
+        runner.withPropertyValues("spring.profiles.active=test", "DB_PASSWORD=")
+                .run(context -> assertThat(context).hasFailed().getFailure().hasMessageContaining("DB_PASSWORD"));
+    }
+
+    @Test
     void productionRejectsDevelopmentDatabasePassword() {
         runner.withPropertyValues("spring.profiles.active=prod", "DB_PASSWORD=fasswerk")
                 .run(context -> assertThat(context).hasFailed());

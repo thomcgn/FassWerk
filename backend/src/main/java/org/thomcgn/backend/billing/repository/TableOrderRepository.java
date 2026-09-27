@@ -41,8 +41,8 @@ public interface TableOrderRepository extends JpaRepository<TableOrder, Long> {
               and o.closedAt < :end
               and (:paid is null or o.paid = :paid)
               and (
-                :queryText is null
-                or lower(cast(o.table.name as string)) like lower(concat('%', :queryText, '%'))
+                cast(:queryText as string) is null
+                or lower(cast(o.table.name as string)) like lower(concat('%', cast(:queryText as string), '%'))
               )
             order by o.closedAt desc
             """)
@@ -60,8 +60,8 @@ public interface TableOrderRepository extends JpaRepository<TableOrder, Long> {
             where o.status = :status
               and o.paid = false
               and (
-                :queryText is null
-                or lower(cast(o.table.name as string)) like lower(concat('%', :queryText, '%'))
+                cast(:queryText as string) is null
+                or lower(cast(o.table.name as string)) like lower(concat('%', cast(:queryText as string), '%'))
               )
             order by o.closedAt desc
             """)

@@ -1,5 +1,7 @@
 package org.thomcgn.backend.auth;
 
+import org.thomcgn.backend.support.PostgresIntegrationTest;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -26,7 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
-class AuthFlowIntegrationTest {
+class AuthFlowIntegrationTest extends PostgresIntegrationTest {
 
     @LocalServerPort
     private int port;

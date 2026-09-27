@@ -89,3 +89,52 @@ Details: [PHASE_2_REPORT.md](PHASE_2_REPORT.md) und
 Keine weiteren Baseline-Befunde werden durch die Konfigurationsphase als erledigt
 betrachtet. Insbesondere bleiben Replay-/Access-Token-Sperrsemantik, API-Rollen,
 Billing-Datenverlust und fachliche Concurrency-Themen offen.
+
+## Fortschritt nach Phase 3 (2026-09-27)
+
+Details: [PHASE_3_REPORT.md](PHASE_3_REPORT.md) und
+[PostgreSQL-Teststrategie](../testing.md). Die urspruengliche Tabelle bleibt als
+historische Baseline erhalten.
+
+| ID | Status nach Phase 3 |
+| --- | --- |
+| TD-009 | Behoben: H2 entfernt, PostgreSQL-16-Testcontainers fuer saemtliche DB-Integrationstests; Flyway aktiv, Hibernate validate statt create-drop. Unit-Tests bleiben isoliert. |
+| TD-008 | Nicht behoben, jetzt deterministisch an echten Services reproduziert: zwei Reservierungen bei einem Tisch, zwei offene Bons, Teilzahlung erzeugt 4 bezahlte plus 1 offene aus 3 Positionseinheiten, Bestand 4 trotz zweimal -6 von anfangs 10, zwei aktive Refresh-Nachfolger. Fuenf ausdrueckliche Charakterisierungstests, keine Sicherheitsgarantie. Korrektur in Phasen 6/7/8. |
+| TD-011 | Frischinstallation aller 14 Migrationen, wiederholtes migrate ohne Aenderung, V17-Legacy-bytea-Upgrades und V20->V21 nachgewiesen. Fremde historische Checksummen/konsolidierte Deployments weiterhin ungeprueft. |
+| TD-023 | DB-/Constraint-/Repository-/Transaktionsabdeckung erweitert. Kein vollstaendiger Domain-, Last- oder echter Frontend-Backend-E2E-Nachweis. |
+| TD-010 | Unveraendert: lokale PostgreSQL-Gates vorhanden, CI fuehrt noch kein Backend-verify aus. |
+| TD-005 / TD-033 | Unveraendert: 20 npm-Audit-Befunde, fuenf Frontend-Lint-Warnungen. |
+
+Zusaetzlicher PostgreSQL-Befund: Die Unique Keys der taeglichen/woechentlichen
+Verkaufsaggregate erlauben mehrere Zeilen mit NULL drink_variant_id. Nicht-NULL-
+Varianten sind eindeutig. In Phase 8 gewuenschte Aggregatidentitaet festlegen und
+gegebenenfalls vorhandene Duplikate vor einem neuen Constraint migrieren.
+
+Die neuen knownGap-Tests fixieren ausschliesslich den Ist-Befund. Bei Behebung der
+Invarianten muessen sie auf Soll-Verhalten umgestellt werden; ihr gruener Status
+darf weder als erledigtes TD-008 noch als Freigabe konkurrierender Zahlungen gelten.
+
+Neu reproduziert und korrigiert: `TableOrderRepository.searchArchive` scheiterte
+unter PostgreSQL bei NULL-Suchtext mit `function lower(bytea) does not exist`.
+Explizite String-Casts fuer den Suchparameter in beiden Archivabfragen korrigieren
+die Typisierung; vier echte Repository-Testfaelle pruefen NULL, Gross-/Kleinschreibung,
+fehlenden Treffer und Zahlungsfilter. Kein Schema- oder API-Wechsel erforderlich.
+
+
+## CI-OpenAPI-Korrektur nach Phase 3 (2026-09-27)
+
+TD-010 teilweise behoben: Der Job backend-openapi fuehrt nun clean verify aus und
+startet eine separate PostgreSQL-16-Exportdatenbank mit zufaelligen DB-/JWT-Werten.
+Der fruehere Export konnte ohne DB und Pflichtvariablen nicht starten; die Schleife
+wartete trotzdem rund 40 Sekunden. Zusaetzlich reproduziert: Health 503 wegen des
+fuer den Schemaexport nicht benoetigten SMTP-Servers sowie HTTP 403 fuer die bislang
+nicht oeffentlich freigegebene YAML-Adresse. SMTP-Health wird nur im CI-Export
+ausgenommen; DB-Health und Produktionsvalidierung bleiben aktiv. JSON/YAML werden
+durch zwei neue echte HTTP-Tests abgesichert.
+
+Exportfehler zeigen jetzt das Backend-Log, CI laedt es als Fehlerartefakt hoch.
+Prozess-/Container-Cleanup ist auf eigene Ressourcen begrenzt; Exporte werden erst
+nach erfolgreichem Download und YAML-Kopfpruefung atomar veroeffentlicht.
+Kein erfolgreicher GitHub-Lauf behauptet: Die Korrektur wird lokal mit echtem JAR,
+PostgreSQL und prod-Profil geprueft. Vollstaendige Frontend-/Release-/Image-Gates
+bleiben offen. Details und Pruefergebnisse: [CI_OPENAPI_FIX.md](CI_OPENAPI_FIX.md).

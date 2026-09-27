@@ -1,5 +1,7 @@
 package org.thomcgn.backend.billing.api;
 
+import org.thomcgn.backend.support.PostgresIntegrationTest;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -40,7 +42,7 @@ import static org.mockito.Mockito.when;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
-class TableOrderArchiveApiIntegrationTest {
+class TableOrderArchiveApiIntegrationTest extends PostgresIntegrationTest {
 
     @LocalServerPort
     private int port;

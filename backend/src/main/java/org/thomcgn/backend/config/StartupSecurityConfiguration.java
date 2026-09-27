@@ -30,13 +30,11 @@ public class StartupSecurityConfiguration {
                 || (!(dev || test) && (secret.startsWith("dev-only-") || secret.startsWith("test-secret-")))) {
             throw new IllegalStateException("JWT_SECRET must be a non-placeholder signing key of at least 32 UTF-8 bytes");
         }
-        String url = required(env, "spring.datasource.url", "DB_URL");
+        required(env, "spring.datasource.url", "DB_URL");
         required(env, "spring.datasource.username", "DB_USER");
-        if (!(test && url.startsWith("jdbc:h2:mem:"))) {
-            String password = required(env, "spring.datasource.password", "DB_PASSWORD");
-            if (placeholder(password) || (!dev && password.equals("fasswerk"))) {
-                throw new IllegalStateException("DB_PASSWORD must not be a placeholder or a development default");
-            }
+        String databasePassword = required(env, "spring.datasource.password", "DB_PASSWORD");
+        if (placeholder(databasePassword) || (!dev && databasePassword.equals("fasswerk"))) {
+            throw new IllegalStateException("DB_PASSWORD must not be a placeholder or a development default");
         }
         String email = env.getProperty("app.bootstrap.admin-email", "");
         String password = env.getProperty("app.bootstrap.admin-password", "");

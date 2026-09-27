@@ -1,48 +1,40 @@
 package org.thomcgn.backend.auth;
 
 import org.junit.jupiter.api.Test;
-import org.springframework.core.io.ClassPathResource;
-import org.springframework.jdbc.datasource.init.ScriptUtils;
-
-import java.nio.charset.StandardCharsets;
-import java.sql.DriverManager;
-import java.util.UUID;
-import java.util.regex.Pattern;
+import org.thomcgn.backend.support.MigratedPostgresTest;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-class LegacySeedMigrationTest {
+class LegacySeedMigrationTest extends MigratedPostgresTest {
+    @Override
+    protected String migrationTarget() { return "20"; }
+
     @Test
     void disablesOnlyUnchangedSeedPasswordsAndRevokesTheirRefreshTokens() throws Exception {
-        // A focused data-transition test, not a replacement for PostgreSQL/Flyway testing.
-        try (var connection = DriverManager.getConnection("jdbc:h2:mem:" + UUID.randomUUID(), "sa", "");
-             var statement = connection.createStatement()) {
-            statement.execute("create table app_users (id bigint primary key, password_hash varchar(255), active boolean, updated_at timestamp)");
-            statement.execute("create table refresh_tokens (id bigint primary key, user_id bigint references app_users(id))");
-            String original = new ClassPathResource("db/migration/V2__auth_and_tokens_consolidated.sql")
-                    .getContentAsString(StandardCharsets.UTF_8);
-            var hashes = Pattern.compile("'(\\$2b\\$[^']+)'").matcher(original).results()
-                    .map(match -> match.group(1)).toList();
-            assertThat(hashes).hasSize(2);
-            try (var insert = connection.prepareStatement("insert into app_users values (?, ?, true, current_timestamp)")) {
-                for (int i = 1; i <= 3; i++) {
-                    insert.setLong(1, i);
-                    insert.setString(2, i < 3 ? hashes.get(i - 1) : "already-rotated-password-hash");
-                    insert.executeUpdate();
-                    statement.execute("insert into refresh_tokens values (" + i + ", " + i + ")");
+        try (var connection = databaseConnection(); var sql = connection.createStatement()) {
+            sql.execute("""
+                    insert into app_users (name, email, password_hash, role, active)
+                    values ('Changed', 'changed@example.test', 'already-rotated-password-hash', 'ADMIN', true)
+                    """);
+            sql.execute("""
+                    insert into refresh_tokens (token_id, user_id, expires_at)
+                    select 'session-' || id, id, now() + interval '1 day' from app_users
+                    """);
+            assertThat(migration("latest").migrate().migrationsExecuted).isEqualTo(1);
+            try (var rows = sql.executeQuery("select email, active, password_hash from app_users order by email")) {
+                int count = 0;
+                while (rows.next()) {
+                    boolean changed = rows.getString("email").equals("changed@example.test");
+                    assertThat(rows.getBoolean("active")).isEqualTo(changed);
+                    assertThat(rows.getString("password_hash")).isEqualTo(changed
+                            ? "already-rotated-password-hash" : "DISABLED_LEGACY_SEED");
+                    count++;
                 }
+                assertThat(count).isEqualTo(3);
             }
-            ScriptUtils.executeSqlScript(connection, new ClassPathResource("db/migration/V21__disable_known_seed_credentials.sql"));
-            try (var rows = statement.executeQuery("select id, active, password_hash from app_users order by id")) {
-                for (int i = 1; i <= 3; i++) {
-                    assertThat(rows.next()).isTrue();
-                    assertThat(rows.getBoolean("active")).isEqualTo(i == 3);
-                    assertThat(rows.getString("password_hash")).isEqualTo(i < 3 ? "DISABLED_LEGACY_SEED" : "already-rotated-password-hash");
-                }
-            }
-            try (var rows = statement.executeQuery("select user_id from refresh_tokens")) {
+            try (var rows = sql.executeQuery("select u.email from refresh_tokens r join app_users u on u.id = r.user_id")) {
                 assertThat(rows.next()).isTrue();
-                assertThat(rows.getLong(1)).isEqualTo(3);
+                assertThat(rows.getString(1)).isEqualTo("changed@example.test");
                 assertThat(rows.next()).isFalse();
             }
         }

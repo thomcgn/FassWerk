@@ -6,7 +6,7 @@
 | --- | --- | --- | --- |
 | none / prod | DB_URL, DB_USER and DB_PASSWORD required | private JWT_SECRET required | secure default / deployment |
 | dev | explicit local PostgreSQL defaults may be used | development-only key unless overridden | local development only |
-| test | H2 and synthetic credentials from test resources | test-only key | automated tests, not packaged in the JAR |
+| test | disposable PostgreSQL 16 / Testcontainers with runtime credentials | test-only key | automated tests, not packaged in the JAR |
 
 `prod` combined with `dev` or `test` is rejected. A BeanFactoryPostProcessor validates
 secrets before datasource/Flyway initialization. Missing values, known placeholders,
@@ -123,7 +123,10 @@ npm run test:e2e:critical
 invalid and valid credentials, profile conflicts, development settings and bootstrap
 requirements. `AdminBootstrapTest` checks opt-in, BCrypt storage and protection of
 existing accounts. `LegacySeedMigrationTest` checks the selective transition and
-refresh-session removal with H2; this does not replace PostgreSQL integration tests.
-The phase report records additional isolated PostgreSQL and packaged-JAR smoke checks.
+refresh-session removal by upgrading a real PostgreSQL database from V20 to V21.
+All database integration tests use Testcontainers, Flyway and Hibernate schema
+validation; there is no H2 dependency or Hibernate-generated test schema. Docker
+must be available; unavailable Docker fails the tests rather than skipping them.
+See [database test strategy](testing.md) for isolation, coverage and concurrency findings.
 Playwright uses one worker locally and in CI because its shared Next dev server
 compiles routes on demand; test timeouts and assertions are unchanged.

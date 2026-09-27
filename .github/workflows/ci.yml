@@ -21,29 +21,54 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Build backend
-        run: ./mvnw -DskipTests package
+      - name: Verify backend
+        run: ./mvnw -B clean verify
+
+      - name: Prepare OpenAPI database and credentials
+        run: |
+          DB_PASSWORD=$(openssl rand -hex 32)
+          JWT_SECRET=$(openssl rand -hex 48)
+          echo "::add-mask::$DB_PASSWORD"
+          echo "::add-mask::$JWT_SECRET"
+          {
+            echo "DB_URL=jdbc:postgresql://127.0.0.1:5432/fasswerk_openapi"
+            echo "DB_USER=ci_openapi"
+            echo "DB_PASSWORD=$DB_PASSWORD"
+            echo "JWT_SECRET=$JWT_SECRET"
+          } >> "$GITHUB_ENV"
+          export POSTGRES_PASSWORD="$DB_PASSWORD"
+          docker run --detach --name fasswerk-openapi-db \
+            --publish 127.0.0.1:5432:5432 \
+            --env POSTGRES_DB=fasswerk_openapi \
+            --env POSTGRES_USER=ci_openapi \
+            --env POSTGRES_PASSWORD postgres:16-alpine
 
       - name: Export OpenAPI
-        run: |
-          VERSION=$(./mvnw -q help:evaluate -Dexpression=project.version -DforceStdout)
-          java -jar target/backend-${VERSION}.jar > /tmp/backend.log 2>&1 &
-          for i in $(seq 1 40); do
-            if curl -fsS http://127.0.0.1:8080/actuator/health > /dev/null; then
-              break
-            fi
-            sleep 1
-          done
-          mkdir -p ../docs/api
-          curl -fsS http://127.0.0.1:8080/v3/api-docs.yaml -o ../docs/api/openapi-v${VERSION}.yaml
-          pkill -f "backend-${VERSION}.jar" || true
-          echo "OPENAPI_FILE=docs/api/openapi-v${VERSION}.yaml" >> "$GITHUB_ENV"
+        env:
+          SPRING_PROFILES_ACTIVE: prod
+          OPENAPI_SKIP_BUILD: 'true'
+          # Schema export needs PostgreSQL, but does not use an SMTP server.
+          MANAGEMENT_HEALTH_MAIL_ENABLED: 'false'
+        run: ./scripts/export-openapi.sh
+
+      - name: Upload backend startup log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-openapi-startup-log
+          path: backend/target/openapi-backend.log
+          if-no-files-found: ignore
+
+      - name: Remove OpenAPI database
+        if: always()
+        run: docker rm --force fasswerk-openapi-db 2>/dev/null || true
 
       - name: Upload OpenAPI artifact
         uses: actions/upload-artifact@v4
         with:
           name: openapi-spec
           path: ${{ env.OPENAPI_FILE }}
+          if-no-files-found: error
 
   frontend-e2e-critical:
     runs-on: ubuntu-latest

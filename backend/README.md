@@ -44,8 +44,12 @@ administrator already exists.
 ```
 
 Tests explicitly use the `test` profile from `src/test/resources`. This profile
-and its H2 settings are not included in the production JAR. Combining `prod` with
-`dev` or `test` fails at startup.
+and its PostgreSQL/Testcontainers setup are not included in the production JAR.
+A reachable Docker engine is required. Testcontainers supplies an isolated PostgreSQL
+16 instance and generated credentials; no local/production database is used. Flyway
+creates the schema and Hibernate only validates it. Docker unavailability fails
+the tests (no skips or H2 fallback). Combining `prod` with `dev` or `test` fails at startup.
+See [database test strategy](../docs/testing.md), including known concurrency gaps.
 
 ## Actuator
 - `GET /actuator/health` is public
@@ -62,7 +66,19 @@ Versionierte OpenAPI lokal exportieren:
 ./scripts/export-openapi.sh
 ```
 
-In CI wird die Datei ebenfalls erzeugt und als Build-Artefakt abgelegt (siehe `.github/workflows/ci.yml`).
+Der Export erwartet eine erreichbare PostgreSQL-Datenbank und die in
+[configuration.md](../docs/configuration.md) beschriebenen DB-/JWT-Variablen.
+Standardmaessig wird zuvor `clean verify` ausgefuehrt. `OPENAPI_SKIP_BUILD=true`
+verwendet ein bereits geprueftes JAR; `OPENAPI_OUT_DIR` und `SERVER_PORT` sind optional.
+Start-/Downloadfehler zeigen das Backend-Log; nur der gestartete Prozess wird beendet.
+
+CI fuehrt zuerst alle Backendtests aus und startet fuer den Export eine separate,
+kurzlebige PostgreSQL-16-Instanz mit generierten Zugangsdaten und JWT-Schluessel.
+Es sind keine Produktions-Secrets notwendig. Nur im CI-Export ist der SMTP-Healthcheck
+via `MANAGEMENT_HEALTH_MAIL_ENABLED=false` ausgenommen; DB-Health bleibt aktiv.
+Bei Fehlern wird
+`backend/target/openapi-backend.log` als Diagnoseartefakt hochgeladen; die Datenbank
+wird auch bei einem fehlgeschlagenen Export entfernt (siehe `.github/workflows/ci.yml`).
 
 ## Legacy seed users
 
