@@ -83,6 +83,7 @@ jobs:
         run: docker rm --force fasswerk-openapi-db 2>/dev/null || true
 
       - name: Upload OpenAPI artifact
+        if: ${{ always() && env.OPENAPI_FILE != '' }}
         uses: actions/upload-artifact@v4
         with:
           name: openapi-spec

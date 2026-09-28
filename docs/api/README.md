@@ -36,3 +36,10 @@ Der CI-Job `backend-openapi` startet das produktive Backend gegen PostgreSQL,
 exportiert erneut nach `docs/api/openapi.yaml`, prueft den Git-Diff und danach die
 generierten Frontend-Typen. Eine DTO-, Required-/Nullable- oder Endpunktaenderung
 wird dadurch als bewusste Vertragsaenderung sichtbar.
+
+Der Vertrag verwendet die explizite relative Serveradresse `/`. Export-Host und
+`SERVER_PORT` duerfen keinen Diff verursachen. Bei einem fehlgeschlagenen Schritt
+`Verify committed OpenAPI contract` zeigt das CI-Log den Vertrags-Diff; der
+exportierte Stand steht auch bei diesem Fehler als `openapi-spec`-Artefakt bereit.
+Echte Schemaaenderungen muessen gemeinsam mit dem aktualisierten Snapshot und den
+generierten Frontend-Typen eingecheckt werden; der Vergleich bleibt verbindlich.

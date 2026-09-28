@@ -38,6 +38,15 @@ class OpenApiIntegrationTest extends PostgresIntegrationTest {
     }
 
     @Test
+    void serverUrlDoesNotDependOnTheExportHostOrRandomPort() throws Exception {
+        JsonNode root = new ObjectMapper().readTree(get("/v3/api-docs").body());
+        assertThat(root.path("servers").size()).isEqualTo(1);
+        assertThat(root.path("servers").get(0).path("url").asText()).isEqualTo("/");
+        assertThat(get("/v3/api-docs.yaml").body()).contains("- url: /")
+                .doesNotContain("127.0.0.1:", "localhost:");
+    }
+
+    @Test
     void jsonContractHasDocumentedOperationsAndCompleteResponseSchemas() throws Exception {
         JsonNode root = new ObjectMapper().readTree(get("/v3/api-docs").body());
         assertThat(root.path("openapi").asText()).startsWith("3.0.");

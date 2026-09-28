@@ -7,8 +7,7 @@ info:
     name: FassWerk Team
   version: 0.0.1-SNAPSHOT
 servers:
-- url: http://127.0.0.1:18081
-  description: Generated server url
+- url: /
 tags:
 - name: Tables
   description: "Tischstammdaten, Kapazitaet und Belegungsstatus"

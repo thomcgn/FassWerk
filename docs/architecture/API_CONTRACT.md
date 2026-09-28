@@ -8,6 +8,8 @@ Spring MVC DTOs plus Springdoc annotations are the only authored API contract.
 `docs/api/openapi.yaml` is a reproducible snapshot exported from a running prod-
 profile backend with PostgreSQL. `frontend/types/generated/api.ts` is generated
 from that snapshot by the lockfile-pinned `openapi-typescript` dependency.
+The explicit relative server URL `/` keeps exports independent of the local or CI
+host and port; it also lets Swagger UI use the serving origin.
 `frontend/types/api.ts` contains compatibility aliases, not independently authored
 DTO shapes.
 
