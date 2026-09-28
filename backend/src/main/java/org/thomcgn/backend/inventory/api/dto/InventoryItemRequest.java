@@ -15,6 +15,7 @@ public record InventoryItemRequest(
         @Schema(nullable = true) Long linkedDrinkId,
         @Schema(nullable = true) Long linkedDrinkVariantId,
         @NotNull PackageType packageType,
+        @Schema(description = "Initial stock for creation; updates must retain the displayed package count. Use the adjustment endpoint for stock corrections.")
         @NotNull @DecimalMin("0.00") BigDecimal packagesInStock,
         @NotNull @DecimalMin("0.01") BigDecimal contentPerPackage,
         @NotNull ContentUnit contentUnit,
@@ -29,7 +30,9 @@ public record InventoryItemRequest(
         @Schema(nullable = true)
         @DecimalMin("0.00") BigDecimal recommendedReorderPackages,
         @Schema(nullable = true) String supplier,
-        @NotNull Boolean active
+        @NotNull Boolean active,
+        @Schema(description = "Revision read before editing; required for updates, omitted for creation", nullable = true)
+        @jakarta.validation.constraints.Min(0) Long expectedRevision
 ) {
 }
 

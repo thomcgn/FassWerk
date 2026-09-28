@@ -242,6 +242,7 @@ export async function mockFlowApis(page: Page, state: FlowState) {
       };
       const totalStockAmount = body.packagesInStock * body.contentPerPackage;
       const created: Inventory = {
+        revision: 0,
         id: state.counters.inventoryId++,
         name: body.name,
         linkedDrinkId: body.linkedDrinkId,

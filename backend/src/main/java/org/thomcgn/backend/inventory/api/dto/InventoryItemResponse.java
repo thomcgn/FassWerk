@@ -21,7 +21,8 @@ public record InventoryItemResponse(
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED) BigDecimal minimumStock,
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED) BigDecimal recommendedReorderAmount,
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED, nullable = true) String supplier,
-        @Schema(requiredMode = Schema.RequiredMode.REQUIRED) boolean active
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED) boolean active,
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED) long revision
 ) {
 }
 

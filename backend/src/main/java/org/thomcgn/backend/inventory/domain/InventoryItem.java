@@ -22,6 +22,10 @@ import java.math.BigDecimal;
 @Table(name = "inventory_items")
 public class InventoryItem extends BaseEntity {
 
+    @jakarta.persistence.Version
+    @Column(nullable = false)
+    private long revision;
+
     @Column(nullable = false)
     private String name;
 

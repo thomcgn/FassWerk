@@ -18,7 +18,7 @@ class ReservationCapacityMigrationTest extends MigratedPostgresTest {
                 rows.next(); reservationId=rows.getLong(1);
             }
         }
-        assertThat(migration("latest").migrate().migrationsExecuted).isEqualTo(7);
+        assertThat(migration("latest").migrate().migrationsExecuted).isEqualTo(8);
         try (var connection=databaseConnection(); var sql=connection.createStatement()) {
             try(var rows=sql.executeQuery("select t.seats,r.starts_at,r.duration_minutes,r.reservation_zone,rt.table_id,r.guest_count from reservations r join reservation_tables rt on rt.reservation_id=r.id join tables t on t.id=rt.table_id where r.id="+reservationId)) {
                 assertThat(rows.next()).isTrue();

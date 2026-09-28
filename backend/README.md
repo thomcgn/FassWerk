@@ -129,3 +129,12 @@ Angaben erhalten 400; Backend und BFF/Frontend gemeinsam aktualisieren.
 Bon-Abschluss, Zurückstellen und Wiederöffnung unterstützen ebenfalls den
 Idempotenzheader. Details, Wiederholungsverhalten und Prüfungen:
 [Phase-1-Bericht](../docs/production/PHASE_1_REPORT.md).
+
+### Production-Roadmap: konkurrierende Formulare (Phase 2)
+
+V30 ergänzt Revisionen für Inventar und Schichtabrechnung. Inventar-PUT sowie
+Schicht-PUT senden die zuvor gelesene `expectedRevision`; Inventar-DELETE verwendet
+sie als Queryparameter. Veraltete Stände ergeben 409. Stammdaten-PUT verändert
+keine physische Bestandsmenge; Korrekturen bleiben Bewegungsbuchungen mit Begründung.
+Backend und Frontend gemeinsam aktualisieren, ohne alte und neue Backend-Schreiber
+parallel zu betreiben. Details: [Phase-2-Bericht](../docs/production/PHASE_2_REPORT.md).

@@ -297,6 +297,8 @@ export default function InventoryClient() {
 
     const payload: InventoryItemUpsertRequest = {
       name: existing.name,
+      expectedRevision: existing.revision,
+      recommendedReorderAmount: existing.recommendedReorderAmount,
       linkedDrinkId: drinkId ?? selectedVariant?.drinkId ?? null,
       linkedDrinkVariantId: variantId,
       packageType: existing.packageType,
@@ -316,6 +318,11 @@ export default function InventoryClient() {
     });
 
     if (!response.ok) {
+      if (response.status === 409) {
+        await loadInventory();
+        setConfigError("Der Lagerartikel wurde zwischenzeitlich geändert. Aktueller Bestand wurde neu geladen; deine Auswahl bleibt erhalten. Bitte prüfen und erneut speichern.");
+        return;
+      }
       setConfigError(await readApiError(response, "Verknüpfung konnte nicht gespeichert werden."));
       return;
     }
@@ -329,9 +336,13 @@ export default function InventoryClient() {
     setConfigStatus(null);
     setDeletingItemId(itemId);
 
-    const response = await fetch(`/api/inventory/${itemId}`, { method: "DELETE" });
+    const expectedRevision = items.find(item => item.id === itemId)?.revision;
+    const response = await fetch(`/api/inventory/${itemId}?expectedRevision=${expectedRevision}`, { method: "DELETE" });
     if (!response.ok) {
-      setConfigError(await readApiError(response, "Position konnte nicht gelöscht werden."));
+      if (response.status === 409) await loadInventory();
+      setConfigError(response.status === 409
+        ? "Der Lagerartikel wurde geändert. Aktuellen Bestand vor dem Löschen erneut prüfen."
+        : await readApiError(response, "Position konnte nicht gelöscht werden."));
       setDeletingItemId(null);
       return;
     }
@@ -481,7 +492,7 @@ export default function InventoryClient() {
           <div className="space-y-3 rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-4">
             <p className="text-sm font-semibold">Bestehenden Lagerartikel verknüpfen</p>
             <div className="space-y-2">
-              <Select value={linkItemId} onChange={(event) => setLinkItemId(event.target.value)}>
+              <Select aria-label="Lagerartikel verknüpfen" value={linkItemId} onChange={(event) => setLinkItemId(event.target.value)}>
                 {items.map((item) => (
                   <option key={item.id} value={String(item.id)}>
                     {item.name}
@@ -489,6 +500,7 @@ export default function InventoryClient() {
                 ))}
               </Select>
               <Select
+                aria-label="Drink für Verknüpfung"
                 value={form.linkedDrinkId}
                 onChange={(event) => {
                   const nextDrinkId = event.target.value;
@@ -514,6 +526,7 @@ export default function InventoryClient() {
                 ))}
               </Select>
               <Select
+                aria-label="Variante für Verknüpfung"
                 value={form.linkedDrinkVariantId}
                 onChange={(event) => setForm((current) => ({ ...current, linkedDrinkVariantId: event.target.value }))}
               >
@@ -872,6 +885,7 @@ export default function InventoryClient() {
                 Soll die Lagerposition &quot;{deleteCandidate.name}&quot; wirklich gelöscht werden?
               </CardDescription>
             </CardHeader>
+            {configError && <p role="alert" className="px-6 text-sm text-red-300">{configError}</p>}
             <CardContent className="flex items-center justify-end gap-2">
               <Button
                 variant="outline"

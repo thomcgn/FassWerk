@@ -60,6 +60,53 @@ try {
     await api(`/api/reservations/${reservation.id}/confirm`, 'POST', {});
     await api(`/api/reservations/${reservation.id}/check-in`, 'POST');
     const order = await api(`/api/table-orders/open/table/${reservation.assignedTableIds[0]}`);
+    // A stock form read before another device books a drink must not restore stock.
+    await page.goto(`${left}/inventory`);
+    await expect(page.getByRole('heading', { name: 'Lagerbestand kompakt' })).toBeVisible();
+    const showConfig = page.getByRole('button', { name: 'Konfiguration einblenden' });
+    if (await showConfig.count()) await showConfig.click();
+    await page.getByLabel('Lagerartikel verknüpfen').selectOption(String(inventory.id));
+    await page.getByLabel('Drink für Verknüpfung').selectOption(String(drink.id));
+    await page.getByLabel('Variante für Verknüpfung').selectOption(String(variant.id));
+    const consumed = await api(`/api/table-orders/${order.id}/items`, 'POST',
+      { drinkVariantId: variant.id, quantity: 1 }, 'phase2-concurrent-consumption', right);
+    const inventoryConflict = page.waitForResponse(response => response.url().endsWith(`/api/inventory/${inventory.id}`) && response.request().method() === 'PUT');
+    await page.getByRole('button', { name: 'Verknüpfung speichern', exact: true }).click();
+    assert.equal((await inventoryConflict).status(), 409);
+    await expect(page.getByText(/Aktueller Bestand wurde neu geladen/).first()).toBeVisible();
+    await expect(page.getByLabel('Variante für Verknüpfung')).toHaveValue(String(variant.id));
+    assert.equal(Number((await api('/api/inventory')).find(item => item.id === inventory.id).totalStockAmount), 9.75);
+    const inventorySaved = page.waitForResponse(response => response.url().endsWith(`/api/inventory/${inventory.id}`) && response.request().method() === 'PUT');
+    await page.getByRole('button', { name: 'Verknüpfung speichern', exact: true }).click();
+    assert.equal((await inventorySaved).status(), 200);
+    assert.equal(Number((await api('/api/inventory')).find(item => item.id === inventory.id).totalStockAmount), 9.75);
+    await api(`/api/table-orders/${order.id}/items/${consumed.items[0].id}`, 'DELETE', undefined, 'phase2-restore-consumption', right);
+
+    // Two independent BFFs edit the same shift; the losing browser retains its draft.
+    for (const [device, origin] of [[page, left], [rightPage, right]]) {
+      await device.goto(`${origin}/shift-settlement`);
+      await device.locator('#settlement-date').fill('2038-06-01');
+      await expect(device.getByRole('button', { name: 'Schichtabrechnung speichern', exact: true })).toBeEnabled();
+      await expect(device.locator('#opening-cash')).toHaveValue('0');
+    }
+    await page.locator('#opening-cash').fill('100');
+    await rightPage.locator('#opening-cash').fill('200');
+    await page.getByRole('button', { name: 'Schichtabrechnung speichern', exact: true }).click();
+    await expect(page.getByText('Schichtabrechnung wurde gespeichert.', { exact: true }).first()).toBeVisible();
+    await rightPage.getByRole('button', { name: 'Schichtabrechnung speichern', exact: true }).click();
+    await expect(rightPage.getByText('Konflikt: Dein Entwurf oben wurde nicht überschrieben.', { exact: true })).toBeVisible();
+    await expect(rightPage.locator('#opening-cash')).toHaveValue('200');
+    await rightPage.getByRole('button', { name: 'Serverstand übernehmen und Entwurf verwerfen', exact: true }).click();
+    await expect(rightPage.locator('#opening-cash')).toHaveValue('100');
+    await rightPage.locator('#other-expenses').fill('5');
+    await rightPage.getByRole('button', { name: 'Schichtabrechnung speichern', exact: true }).click();
+    await expect(rightPage.getByText('Schichtabrechnung wurde gespeichert.', { exact: true }).first()).toBeVisible();
+    const shift = await api('/api/shift-settlements/2038-06-01');
+    assert.equal(shift.revision, 2);
+    assert.equal(Number(shift.openingCash), 100);
+    assert.equal(Number(shift.otherExpenses), 5);
+    console.log('PASS: two-device stock/shift conflicts, preserved draft, explicit resolution and unchanged physical stock');
+
     // Exercise the actual UI: server commits, response is lost, then reload/retry.
     await page.goto(`${left}/table-billing`);
     await page.getByPlaceholder('Order ID').fill(String(order.id));
@@ -139,6 +186,9 @@ try {
     console.log('PASS: browser login, two BFF refreshes, reservation/check-in, lost response, add retry, split and stock');
   } else {
     const state = JSON.parse(await readFile(`${directory}/state.json`, 'utf8'));
+    const persistedShift = await api('/api/shift-settlements/2038-06-01');
+    assert.equal(persistedShift.revision, 2);
+    assert.equal(Number(persistedShift.openingCash), 100);
     // Same credentials, same commands, all application processes restarted.
     await api(`/api/table-orders/${state.orderId}/items`, 'POST', state.addBody, 'audit-lost-add');
     await api(`/api/table-orders/${state.orderId}/items/${state.cancelItemId}`, 'DELETE', undefined, 'audit-cancel');

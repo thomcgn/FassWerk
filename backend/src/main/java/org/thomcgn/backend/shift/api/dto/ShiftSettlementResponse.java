@@ -14,7 +14,8 @@ public record ShiftSettlementResponse(
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED) BigDecimal dailyRevenue,
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED) BigDecimal totalWages,
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED) BigDecimal expectedClosingCash,
-        @Schema(requiredMode = Schema.RequiredMode.REQUIRED) List<ShiftWorkerEntryResponse> entries
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED) List<ShiftWorkerEntryResponse> entries,
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED) long revision
 ) {
 }
 

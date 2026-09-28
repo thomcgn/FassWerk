@@ -16,7 +16,7 @@ const variants = [
   { id: 102, drinkId: 11, drinkName: "Alt", displayVolumeName: "0,3 l", volumeMl: 300, price: 3.4, useStandardPrice: false, sku: null, active: true },
 ];
 function stock(overrides = {}) {
-  return { id: 1, name: "Fass", linkedDrinkId: null, linkedDrinkVariantId: null, packageType: "BARREL", packagesInStock: 1, contentPerPackage: 50, contentUnit: "LITER", totalStockAmount: 50, reorderThreshold: 10, minimumStock: 5, recommendedReorderAmount: 50, supplier: null, active: true, ...overrides };
+  return { id: 1, revision: 0, name: "Fass", linkedDrinkId: null, linkedDrinkVariantId: null, packageType: "BARREL", packagesInStock: 1, contentPerPackage: 50, contentUnit: "LITER", totalStockAmount: 50, reorderThreshold: 10, minimumStock: 5, recommendedReorderAmount: 50, supplier: null, active: true, ...overrides };
 }
 function order(id, closedAt) {
   return { id, tableId: 1, tableName: "T1", reservationId: null, status: "CLOSED", paid: false, openedAt: "2026-09-28T10:00:00Z", closedAt, total: 4, items: [] };

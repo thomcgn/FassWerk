@@ -4,7 +4,7 @@ Stand: 28.09.2026, analysierter `main`: `fb832a8` (zu Beginn sauber).
 Auftrag: [Production-Ready Roadmap](../FASSWERK_PRODUCTION_READY_ROADMAP.md).
 Diese Phase 0 gehört zur Production-Roadmap; die älteren Architektur-Phasenberichte haben eine andere Nummerierung.
 
-Fortschreibung: [Phase 1 – Zahlungs- und Request-Idempotenz](PHASE_1_REPORT.md). Diese Baseline beschreibt weiterhin den Stand vor Phase 1.
+Fortschreibung: [Phase 1 – Zahlungs- und Request-Idempotenz](PHASE_1_REPORT.md). Zusätzlich: [Phase 2 – Concurrent Editing](PHASE_2_REPORT.md). Diese Baseline beschreibt weiterhin den Stand vor Phase 1.
 
 ## Ergebnis und Nachweisgrenzen
 

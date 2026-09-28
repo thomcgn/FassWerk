@@ -21,9 +21,11 @@ export async function PUT(request: Request, { params }: Params) {
   return NextResponse.json(payload, { status: response.status });
 }
 
-export async function DELETE(_: Request, { params }: Params) {
+export async function DELETE(request: Request, { params }: Params) {
   const { id } = await params;
-  const response = await backendFetchWithAuth(`/api/inventory/${id}`, {
+  const revision = new URL(request.url).searchParams.get("expectedRevision");
+  const query = revision === null ? "" : `?expectedRevision=${encodeURIComponent(revision)}`;
+  const response = await backendFetchWithAuth(`/api/inventory/${id}${query}`, {
     method: "DELETE",
   });
 

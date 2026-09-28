@@ -57,7 +57,7 @@ public class InventoryService {
     @Transactional
     public InventoryItemResponse createItem(InventoryItemRequest request) {
         InventoryItem item = new InventoryItem();
-        applyRequest(item, request);
+        applyRequest(item, request, true);
         InventoryItem saved = inventoryItemRepository.save(item);
         return toItemResponse(saved);
     }
@@ -65,14 +65,22 @@ public class InventoryService {
     @Transactional
     public InventoryItemResponse updateItem(Long id, InventoryItemRequest request) {
         InventoryItem item = findItemForUpdate(id);
-        applyRequest(item, request);
-        InventoryItem saved = inventoryItemRepository.save(item);
+        assertRevision(item, request.expectedRevision());
+        if (item.getContentUnit() != request.contentUnit()) {
+            throw new ConflictException("Die Bestandseinheit kann nicht über Stammdaten geändert werden.");
+        }
+        if (item.getPackagesInStock().compareTo(request.packagesInStock()) != 0) {
+            throw new ConflictException("Bestandskorrekturen bitte über die Bestandsanpassung mit Begründung buchen.");
+        }
+        applyRequest(item, request, false);
+        InventoryItem saved = inventoryItemRepository.saveAndFlush(item);
         return toItemResponse(saved);
     }
 
     @Transactional
-    public void deleteItem(Long id) {
+    public void deleteItem(Long id, Long expectedRevision) {
         InventoryItem item = findItemForUpdate(id);
+        assertRevision(item, expectedRevision);
         // Löse Verknüpfung zum Getränk auf statt zu löschen
         // Dadurch wird im Bar Admin wieder die Warnung angezeigt
         item.setLinkedDrink(null);
@@ -111,7 +119,7 @@ public class InventoryService {
 
         item.setTotalStockAmount(newStock);
         synchronizePackageCount(item);
-        inventoryItemRepository.save(item);
+        inventoryItemRepository.saveAndFlush(item);
 
         createMovement(
                 item,
@@ -359,7 +367,13 @@ public class InventoryService {
         item.setPackagesInStock(item.getTotalStockAmount().divide(item.getContentPerPackage(), 2, RoundingMode.HALF_UP));
     }
 
-    private void applyRequest(InventoryItem item, InventoryItemRequest request) {
+    private void assertRevision(InventoryItem item, Long expectedRevision) {
+        if (expectedRevision == null || expectedRevision != item.getRevision()) {
+            throw new ConflictException("Der Lagerartikel wurde geändert. Aktuellen Stand laden und Änderungen prüfen.");
+        }
+    }
+
+    private void applyRequest(InventoryItem item, InventoryItemRequest request, boolean initialStock) {
         Drink linkedDrink = resolveDrink(request.linkedDrinkId());
         DrinkVariant linkedVariant = resolveVariant(request.linkedDrinkVariantId());
         if (linkedVariant != null) {
@@ -374,10 +388,10 @@ public class InventoryService {
         item.setLinkedDrink(linkedDrink);
         item.setLinkedDrinkVariant(linkedVariant);
         item.setPackageType(request.packageType());
-        item.setPackagesInStock(request.packagesInStock());
         item.setContentPerPackage(request.contentPerPackage());
         item.setContentUnit(request.contentUnit());
-        item.setTotalStockAmount(request.packagesInStock().multiply(request.contentPerPackage()));
+        if (initialStock) item.setTotalStockAmount(request.packagesInStock().multiply(request.contentPerPackage()));
+        synchronizePackageCount(item);
 
         BigDecimal contentPerPackage = request.contentPerPackage();
         BigDecimal reorderThreshold = request.reorderThresholdPackages() != null
@@ -430,7 +444,8 @@ public class InventoryService {
                 item.getMinimumStock(),
                 item.getRecommendedReorderAmount(),
                 item.getSupplier(),
-                item.isActive()
+                item.isActive(),
+                item.getRevision()
         );
     }
 

@@ -306,6 +306,12 @@ paths:
         schema:
           type: integer
           format: int64
+      - name: expectedRevision
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int64
       responses:
         "204":
           description: Lagerartikel geloescht
@@ -2000,6 +2006,7 @@ components:
       description: Table Response contract
     ShiftSettlementRequest:
       required:
+      - expectedRevision
       - openingCash
       - otherExpenses
       type: object
@@ -2017,6 +2024,12 @@ components:
           nullable: true
           items:
             $ref: "#/components/schemas/ShiftWorkerEntryRequest"
+        expectedRevision:
+          minimum: 0
+          type: integer
+          description: "Revision returned by GET, including zero for a new unsaved\
+            \ settlement"
+          format: int64
       description: Shift Settlement Request contract
     ShiftWorkerEntryRequest:
       required:
@@ -2047,6 +2060,7 @@ components:
       - id
       - openingCash
       - otherExpenses
+      - revision
       - settlementDate
       - totalWages
       type: object
@@ -2072,6 +2086,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ShiftWorkerEntryResponse"
+        revision:
+          type: integer
+          format: int64
       description: Shift Settlement Response contract
     ShiftWorkerEntryResponse:
       required:
@@ -2362,6 +2379,8 @@ components:
           minimum: 0.00
           exclusiveMinimum: false
           type: number
+          description: Initial stock for creation; updates must retain the displayed
+            package count. Use the adjustment endpoint for stock corrections.
         contentPerPackage:
           minimum: 0.01
           exclusiveMinimum: false
@@ -2405,6 +2424,13 @@ components:
           nullable: true
         active:
           type: boolean
+        expectedRevision:
+          minimum: 0
+          type: integer
+          description: "Revision read before editing; required for updates, omitted\
+            \ for creation"
+          format: int64
+          nullable: true
       description: Inventory Item Request contract
     InventoryItemResponse:
       required:
@@ -2420,6 +2446,7 @@ components:
       - packagesInStock
       - recommendedReorderAmount
       - reorderThreshold
+      - revision
       - supplier
       - totalStockAmount
       type: object
@@ -2468,6 +2495,9 @@ components:
           nullable: true
         active:
           type: boolean
+        revision:
+          type: integer
+          format: int64
       description: Inventory Item Response contract
     ConsumptionMetadataRequest:
       type: object

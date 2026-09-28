@@ -224,6 +224,92 @@ class ApiContractIntegrationTest extends PostgresIntegrationTest {
         } finally { jdbc.update("update inventory_business_settings set manual_business_date=?", previous); }
     }
 
+    @Test
+    void staleInventoryFormCannotRestoreConsumedStock() throws Exception {
+        var stale = inventoryForm();
+        assertThat(send("POST", "/api/inventory/1/adjust", "{\"amount\":1,\"reason\":\"consumed\",\"increase\":false}", "application/json").statusCode()).isEqualTo(200);
+        stale.put("name", "Older form");
+        assertError(send("PUT", "/api/inventory/1", stale.toString(), "application/json"), 409);
+        assertThat(jdbc.queryForObject("select total_stock_amount from inventory_items where id=1", java.math.BigDecimal.class)).isEqualByComparingTo("9");
+    }
+
+    @Test
+    void metadataRoundtripPreservesOneMillilitreRemainder() throws Exception {
+        jdbc.update("update inventory_items set total_stock_amount=9.999, packages_in_stock=1 where id=1");
+        var form = inventoryForm();
+        form.put("name", "Renamed stock");
+        assertThat(send("PUT", "/api/inventory/1", form.toString(), "application/json").statusCode()).isEqualTo(200);
+        assertThat(jdbc.queryForObject("select total_stock_amount from inventory_items where id=1", java.math.BigDecimal.class)).isEqualByComparingTo("9.999");
+    }
+
+    @Test
+    void staleShiftFormCannotReplaceNewerCashOrWorkers() throws Exception {
+        String path = "/api/shift-settlements/2040-06-01";
+        jdbc.update("delete from shift_worker_entries where settlement_id in(select id from shift_settlements where settlement_date='2040-06-01')");
+        jdbc.update("delete from shift_settlements where settlement_date='2040-06-01'");
+        var empty = json.readTree(send("GET", path, null, "application/json").body());
+        String first = "{\"openingCash\":100,\"otherExpenses\":5,\"entries\":[],\"expectedRevision\":" + empty.path("revision").asLong(0) + "}";
+        assertThat(send("PUT", path, first, "application/json").statusCode()).isEqualTo(200);
+        assertError(send("PUT", path, first.replace("100", "200"), "application/json"), 409);
+        assertThat(json.readTree(send("GET", path, null, "application/json").body()).path("openingCash").decimalValue()).isEqualByComparingTo("100");
+    }
+
+    @Test
+    void twoInventoryClientsCannotOverwriteEachOther() throws Exception {
+        var firstForm = inventoryForm();
+        var secondForm = firstForm.deepCopy();
+        firstForm.put("name", "Client A"); secondForm.put("name", "Client B");
+        try (var pool = java.util.concurrent.Executors.newFixedThreadPool(2)) {
+            var first = pool.submit(() -> send("PUT", "/api/inventory/1", firstForm.toString(), "application/json"));
+            var second = pool.submit(() -> send("PUT", "/api/inventory/1", secondForm.toString(), "application/json"));
+            assertThat(java.util.List.of(first.get().statusCode(), second.get().statusCode())).containsExactlyInAnyOrder(200, 409);
+            var current = json.readTree(send("GET", "/api/inventory", null, "application/json").body()).get(0);
+            assertThat(current.path("revision").asLong()).isGreaterThan(firstForm.path("expectedRevision").asLong());
+            assertThat(current.path("name").asText()).isEqualTo(json.readTree((first.get().statusCode() == 200 ? first : second).get().body()).path("name").asText());
+            assertThat(current.path("totalStockAmount").decimalValue()).isEqualByComparingTo("10");
+        }
+    }
+
+    @Test
+    void twoShiftClientsConflictEvenForWorkerOnlyChanges() throws Exception {
+        String path = "/api/shift-settlements/2041-06-01";
+        jdbc.update("delete from shift_worker_entries where settlement_id in(select id from shift_settlements where settlement_date='2041-06-01')");
+        jdbc.update("delete from shift_settlements where settlement_date='2041-06-01'");
+        // Two clients first see an unsaved settlement at revision zero.
+        for (int round = 0; round < 2; round++) {
+            long revision = json.readTree(send("GET", path, null, "application/json").body()).path("revision").asLong();
+            String body = "{\"expectedRevision\":" + revision + ",\"openingCash\":100,\"otherExpenses\":0,\"entries\":[{\"employeeName\":\"Client A\",\"shiftStart\":\"18:00\",\"shiftEnd\":\"20:00\",\"hourlyWage\":10}]}";
+            try (var pool = java.util.concurrent.Executors.newFixedThreadPool(2)) {
+                var first = pool.submit(() -> send("PUT", path, body, "application/json"));
+                var second = pool.submit(() -> send("PUT", path, body.replace("Client A", "Client B"), "application/json"));
+                assertThat(java.util.List.of(first.get().statusCode(), second.get().statusCode())).containsExactlyInAnyOrder(200, 409);
+                var current = json.readTree(send("GET", path, null, "application/json").body());
+                assertThat(current.path("revision").asLong()).isEqualTo(revision + 1);
+                assertThat(current.path("entries").size()).isEqualTo(1);
+                assertThat(current.path("entries").get(0).path("employeeName").asText())
+                    .isEqualTo(json.readTree((first.get().statusCode() == 200 ? first : second).get().body()).path("entries").get(0).path("employeeName").asText());
+            }
+        }
+    }
+
+    @Test
+    void inventoryUpdateCannotSetStockAndStaleDeleteCannotDeactivateItem() throws Exception {
+        var form = inventoryForm();
+        form.put("packagesInStock", 9);
+        assertError(send("PUT", "/api/inventory/1", form.toString(), "application/json"), 409);
+        assertError(send("DELETE", "/api/inventory/1", null, "application/json"), 409);
+        assertThat(send("POST", "/api/inventory/1/adjust", "{\"amount\":1,\"reason\":\"consume\",\"increase\":false}", "application/json").statusCode()).isEqualTo(200);
+        assertError(send("DELETE", "/api/inventory/1?expectedRevision=" + form.path("expectedRevision").asLong(), null, "application/json"), 409);
+        assertThat(jdbc.queryForObject("select active from inventory_items where id=1", Boolean.class)).isTrue();
+    }
+
+    private com.fasterxml.jackson.databind.node.ObjectNode inventoryForm() throws Exception {
+        var form = (com.fasterxml.jackson.databind.node.ObjectNode) json.readTree(send("GET", "/api/inventory", null, "application/json").body()).get(0);
+        form.put("expectedRevision", form.path("revision").asLong(0));
+        form.remove(java.util.List.of("id", "revision", "totalStockAmount"));
+        return form;
+    }
+
     private void assertError(HttpResponse<String> response, int expected) throws Exception {
         assertThat(response.statusCode()).as(response.body()).isEqualTo(expected);
         JsonNode body = json.readTree(response.body());

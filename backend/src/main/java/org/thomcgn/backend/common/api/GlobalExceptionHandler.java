@@ -58,6 +58,13 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 .body(error(HttpStatus.CONFLICT, "Request conflicts with existing data", request));
     }
 
+    @ExceptionHandler(org.springframework.dao.OptimisticLockingFailureException.class)
+    public ResponseEntity<ApiErrorResponse> handleOptimisticConflict(Exception exception, HttpServletRequest request) {
+        logFailure(exception, Level.WARN);
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(error(HttpStatus.CONFLICT, "Daten wurden zwischenzeitlich geändert. Aktuellen Stand laden und Änderungen prüfen.", request));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiErrorResponse> handleUnhandled(Exception exception, HttpServletRequest request) {
         logFailure(exception, Level.ERROR);

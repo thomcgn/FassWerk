@@ -141,7 +141,7 @@ class InventoryServiceUnitConversionTest {
                 new BigDecimal("2"),
                 new BigDecimal("2"),
                 "Beispiel Lieferant",
-                true
+                true, null
         );
 
         when(inventoryItemRepository.save(any(InventoryItem.class)))
@@ -171,7 +171,7 @@ class InventoryServiceUnitConversionTest {
                 null,
                 null,
                 null,
-                true
+                true, null
         );
 
         when(inventoryItemRepository.save(any(InventoryItem.class)))
@@ -193,7 +193,7 @@ class InventoryServiceUnitConversionTest {
 
         when(inventoryItemRepository.findByIdForUpdate(77L)).thenReturn(Optional.of(item));
 
-        inventoryService.deleteItem(77L);
+        inventoryService.deleteItem(77L, 0L);
 
         assertFalse(item.isActive());
         assertNull(item.getLinkedDrink());

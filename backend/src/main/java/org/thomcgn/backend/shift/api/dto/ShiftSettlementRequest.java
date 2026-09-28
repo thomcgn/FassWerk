@@ -13,7 +13,9 @@ public record ShiftSettlementRequest(
         @NotNull @DecimalMin("0.00") BigDecimal openingCash,
         @NotNull @DecimalMin("0.00") BigDecimal otherExpenses,
         @Schema(nullable = true)
-        @Valid List<ShiftWorkerEntryRequest> entries
+        @Valid List<ShiftWorkerEntryRequest> entries,
+        @Schema(description = "Revision returned by GET, including zero for a new unsaved settlement")
+        @NotNull @jakarta.validation.constraints.Min(0) Long expectedRevision
 ) {
 }
 

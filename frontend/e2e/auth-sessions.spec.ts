@@ -16,6 +16,7 @@ test("login -> sessions revoke -> logout-all flow", async ({ page }) => {
         {
           id: 1,
           name: "Guinness Stock",
+          revision: 0,
           linkedDrinkId: null,
           linkedDrinkVariantId: null,
           packageType: "BARREL",

@@ -67,7 +67,7 @@ export function parseDrinkVariant(value: unknown): DrinkVariant | null {
 export const parseDrinkVariants = (value: unknown): DrinkVariant[] | null => parseArray(value, parseDrinkVariant);
 
 export function parseInventoryItem(value: unknown): InventoryItem | null {
-  if (!isRecord(value) || !isNumber(value.id) || !isString(value.name) || !isNullableNumber(value.linkedDrinkId)
+  if (!isRecord(value) || !isNumber(value.id) || !Number.isSafeInteger(value.revision) || Number(value.revision) < 0 || !isString(value.name) || !isNullableNumber(value.linkedDrinkId)
     || !isNullableNumber(value.linkedDrinkVariantId)
     || (value.packageType !== "BARREL" && value.packageType !== "CRATE" && value.packageType !== "BOTTLE" && value.packageType !== "BOX" && value.packageType !== "SINGLE_BOTTLE")
     || !isNumber(value.packagesInStock) || !isNumber(value.contentPerPackage)
@@ -79,7 +79,7 @@ export function parseInventoryItem(value: unknown): InventoryItem | null {
     packageType: value.packageType, packagesInStock: value.packagesInStock, contentPerPackage: value.contentPerPackage,
     contentUnit: value.contentUnit, totalStockAmount: value.totalStockAmount, reorderThreshold: value.reorderThreshold,
     minimumStock: value.minimumStock, recommendedReorderAmount: value.recommendedReorderAmount,
-    supplier: value.supplier, active: value.active,
+    supplier: value.supplier, active: value.active, revision: Number(value.revision),
   };
 }
 

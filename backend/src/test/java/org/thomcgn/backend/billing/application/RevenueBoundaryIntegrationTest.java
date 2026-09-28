@@ -91,7 +91,7 @@ class RevenueBoundaryIntegrationTest extends PostgresIntegrationTest {
         order("CLOSED", true, date.atTime(12, 0), "12.00");
         var request = new ShiftSettlementRequest(new BigDecimal("100.00"), new BigDecimal("5.00"),
                 List.of(new ShiftWorkerEntryRequest("Worker", LocalTime.of(18, 0), LocalTime.of(20, 0),
-                        new BigDecimal("10.00"))));
+                        new BigDecimal("10.00"))), shifts.getByDate(date).revision());
         var result = shifts.saveByDate(date, request);
         assertThat(result.id()).isNotNull();
         assertThat(result.dailyRevenue()).isEqualByComparingTo("12.00");

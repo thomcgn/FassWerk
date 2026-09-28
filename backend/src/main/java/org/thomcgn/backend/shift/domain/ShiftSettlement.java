@@ -21,6 +21,11 @@ import java.util.List;
 @Table(name = "shift_settlements")
 public class ShiftSettlement extends BaseEntity {
 
+    // Incremented for every aggregate replacement while holding BookingMutationLock,
+    // including changes only to worker entries.
+    @Column(nullable = false)
+    private long revision;
+
     @Column(name = "settlement_date", nullable = false, unique = true)
     private LocalDate settlementDate;
 

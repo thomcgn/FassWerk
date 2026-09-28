@@ -84,8 +84,8 @@ public class InventoryController {
             @ApiResponse(responseCode = "204", description = "Lagerartikel geloescht"),
             @ApiResponse(responseCode = "404", description = "Lagerartikel nicht gefunden")
     })
-    public void delete(@PathVariable Long id) {
-        inventoryService.deleteItem(id);
+    public void delete(@PathVariable Long id, @RequestParam(required = false) Long expectedRevision) {
+        inventoryService.deleteItem(id, expectedRevision);
     }
 
     @PostMapping("/{id}/adjust")

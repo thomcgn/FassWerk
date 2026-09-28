@@ -14,7 +14,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class PostgresSchemaIntegrationTest extends MigratedPostgresTest {
     @Test
     void emptyDatabaseReachesCompleteSchemaOnlyThroughFlyway() throws Exception {
-        assertThat(flyway.info().applied()).hasSize(22);
+        assertThat(flyway.info().applied()).hasSize(23);
         assertThat(flyway.info().pending()).isEmpty();
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
         assertThat(flyway.migrate().migrationsExecuted).isZero();

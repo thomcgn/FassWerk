@@ -1107,6 +1107,11 @@ export interface components {
             openingCash: number;
             otherExpenses: number;
             entries?: components["schemas"]["ShiftWorkerEntryRequest"][] | null;
+            /**
+             * Format: int64
+             * @description Revision returned by GET, including zero for a new unsaved settlement
+             */
+            expectedRevision: number;
         };
         /** @description Shift Worker Entry Request contract */
         ShiftWorkerEntryRequest: {
@@ -1127,6 +1132,8 @@ export interface components {
             totalWages: number;
             expectedClosingCash: number;
             entries: components["schemas"]["ShiftWorkerEntryResponse"][];
+            /** Format: int64 */
+            revision: number;
         };
         /** @description Shift Worker Entry Response contract */
         ShiftWorkerEntryResponse: {
@@ -1233,6 +1240,7 @@ export interface components {
             linkedDrinkVariantId?: number | null;
             /** @enum {string} */
             packageType: "BARREL" | "CRATE" | "BOTTLE" | "BOX" | "SINGLE_BOTTLE";
+            /** @description Initial stock for creation; updates must retain the displayed package count. Use the adjustment endpoint for stock corrections. */
             packagesInStock: number;
             contentPerPackage: number;
             /** @enum {string} */
@@ -1245,6 +1253,11 @@ export interface components {
             recommendedReorderPackages?: number | null;
             supplier?: string | null;
             active: boolean;
+            /**
+             * Format: int64
+             * @description Revision read before editing; required for updates, omitted for creation
+             */
+            expectedRevision?: number | null;
         };
         /** @description Inventory Item Response contract */
         InventoryItemResponse: {
@@ -1267,6 +1280,8 @@ export interface components {
             recommendedReorderAmount: number;
             supplier: string | null;
             active: boolean;
+            /** Format: int64 */
+            revision: number;
         };
         /** @description Consumption Metadata Request contract */
         ConsumptionMetadataRequest: {
@@ -1941,7 +1956,9 @@ export interface operations {
     };
     delete: {
         parameters: {
-            query?: never;
+            query?: {
+                expectedRevision?: number;
+            };
             header?: never;
             path: {
                 id: number;

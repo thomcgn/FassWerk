@@ -27,6 +27,7 @@ public class ShiftSettlementService {
 
     private final ShiftSettlementRepository settlementRepository;
     private final BillingRevenueQueries billingRevenue;
+    private final org.thomcgn.backend.common.persistence.BookingMutationLock bookingLock;
 
     @Transactional(readOnly = true)
     public ShiftSettlementResponse getByDate(LocalDate date) {
@@ -44,7 +45,12 @@ public class ShiftSettlementService {
 
     @Transactional
     public ShiftSettlementResponse saveByDate(LocalDate date, ShiftSettlementRequest request) {
+        bookingLock.acquire();
         ShiftSettlement settlement = settlementRepository.findBySettlementDate(date).orElseGet(ShiftSettlement::new);
+        if (request.expectedRevision() == null || request.expectedRevision() != settlement.getRevision()) {
+            throw new org.thomcgn.backend.common.exception.ConflictException("Die Schichtabrechnung wurde geändert. Aktuellen Stand laden und den Entwurf vergleichen.");
+        }
+        settlement.setRevision(settlement.getRevision() + 1);
         settlement.setSettlementDate(date);
         settlement.setOpeningCash(request.openingCash());
         settlement.setOtherExpenses(request.otherExpenses());
@@ -61,7 +67,7 @@ public class ShiftSettlementService {
             settlement.getEntries().add(entry);
         }
 
-        return toResponse(settlementRepository.save(settlement));
+        return toResponse(settlementRepository.saveAndFlush(settlement));
     }
 
     private ShiftSettlementResponse emptyResponse(LocalDate date) {
@@ -74,7 +80,8 @@ public class ShiftSettlementService {
                 revenue,
                 BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP),
                 revenue,
-                List.of()
+                List.of(),
+                0L
         );
     }
 
@@ -117,7 +124,8 @@ public class ShiftSettlementService {
                 revenue,
                 totalWages,
                 expectedClosingCash,
-                entryResponses
+                entryResponses,
+                settlement.getRevision()
         );
     }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -83,6 +83,10 @@ export default function ShiftSettlementClient() {
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const saveInFlight = useRef(false);
+  const loadGeneration = useRef(0);
+  const [conflict, setConflict] = useState(false);
+  const [latestSettlement, setLatestSettlement] = useState<ShiftSettlement | null>(null);
   const [historyPreset, setHistoryPreset] = useState<HistoryPreset>("WEEK");
   const [historyEntries, setHistoryEntries] = useState<ShiftSettlement[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -91,11 +95,15 @@ export default function ShiftSettlementClient() {
   useToastFeedback(status, "success");
 
   const loadSettlement = useCallback(async (date: string) => {
+    const generation = ++loadGeneration.current;
+    setConflict(false);
+    setLatestSettlement(null);
     setError(null);
     setStatus(null);
     setState("loading");
     try {
       const response = await fetch(`/api/shift-settlements/${date}`, { cache: "no-store" });
+      if (generation !== loadGeneration.current) return;
       if (response.status === 401) {
         router.replace("/login");
         return;
@@ -107,12 +115,14 @@ export default function ShiftSettlementClient() {
       }
 
       const payload = (await response.json()) as ShiftSettlement;
+      if (generation !== loadGeneration.current) return;
       setSettlement(payload);
       setOpeningCash(String(payload.openingCash));
       setOtherExpenses(String(payload.otherExpenses));
       setEntries(toFormEntries(payload.entries));
       setState("ready");
     } catch {
+      if (generation !== loadGeneration.current) return;
       setError("Unerwarteter Fehler beim Laden der Schichtabrechnung.");
       setState("error");
     }
@@ -162,7 +172,28 @@ export default function ShiftSettlementClient() {
     setEntries((current) => current.filter((entry) => entry.key !== key));
   }
 
+  async function loadConflict() {
+    try {
+      const response = await fetch(`/api/shift-settlements/${selectedDate}`, { cache: "no-store" });
+      if (!response.ok) throw new Error();
+      setLatestSettlement(await response.json() as ShiftSettlement);
+    } catch { setError("Aktueller Serverstand konnte nicht geladen werden. Dein Entwurf bleibt erhalten."); }
+  }
+
+  function acceptServerSettlement() {
+    if (!latestSettlement || latestSettlement.settlementDate !== selectedDate) return;
+    setSettlement(latestSettlement);
+    setOpeningCash(String(latestSettlement.openingCash));
+    setOtherExpenses(String(latestSettlement.otherExpenses));
+    setEntries(toFormEntries(latestSettlement.entries));
+    setConflict(false);
+    setLatestSettlement(null);
+    setError(null);
+    setStatus("Serverstand übernommen. Du kannst deine Änderungen jetzt erneut eintragen.");
+  }
+
   async function saveSettlement() {
+    if (saveInFlight.current || conflict || !settlement || settlement.settlementDate !== selectedDate) return;
     setError(null);
     setStatus(null);
 
@@ -195,28 +226,34 @@ export default function ShiftSettlementClient() {
       openingCash: opening,
       otherExpenses: expenses,
       entries: upsertEntries,
+      expectedRevision: settlement.revision,
     };
 
+    saveInFlight.current = true;
     setSaving(true);
-    const response = await fetch(`/api/shift-settlements/${selectedDate}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    setSaving(false);
-
-    if (!response.ok) {
-      const body = (await response.json().catch(() => ({}))) as { message?: string; error?: string };
-      setError(body.message || body.error || "Schichtabrechnung konnte nicht gespeichert werden.");
-      return;
-    }
-
-    const saved = (await response.json()) as ShiftSettlement;
-    setSettlement(saved);
-    setOpeningCash(String(saved.openingCash));
-    setOtherExpenses(String(saved.otherExpenses));
-    setEntries(toFormEntries(saved.entries));
-    setStatus("Schichtabrechnung wurde gespeichert.");
+    try {
+      const response = await fetch(`/api/shift-settlements/${selectedDate}`, {
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+      });
+      if (response.status === 409) {
+        setConflict(true);
+        setError("Die Schicht wurde auf einem anderen Gerät geändert. Dein Entwurf bleibt erhalten. Bitte mit dem Serverstand vergleichen.");
+        await loadConflict();
+        return;
+      }
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({})) as { message?: string };
+        throw new Error(body.message || "Schichtabrechnung konnte nicht gespeichert werden.");
+      }
+      const saved = await response.json() as ShiftSettlement;
+      setSettlement(saved);
+      setOpeningCash(String(saved.openingCash));
+      setOtherExpenses(String(saved.otherExpenses));
+      setEntries(toFormEntries(saved.entries));
+      setStatus("Schichtabrechnung wurde gespeichert.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Speichern konnte nicht bestätigt werden. Der Entwurf bleibt erhalten.");
+    } finally { saveInFlight.current = false; setSaving(false); }
   }
 
   const totals = useMemo(() => {
@@ -270,12 +307,13 @@ export default function ShiftSettlementClient() {
               id="settlement-date"
               type="date"
               value={selectedDate}
-              onChange={(event) => setSelectedDate(event.target.value)}
+              disabled={saving || conflict}
+              onChange={(event) => { if (saveInFlight.current) return; loadGeneration.current++; setSelectedDate(event.target.value); }}
             />
           </div>
           <div className="space-y-2">
             <Label htmlFor="opening-cash">Kassenbestand zu Beginn (EUR)</Label>
-            <Input
+            <Input disabled={saving}
               id="opening-cash"
               type="number"
               min="0"
@@ -286,7 +324,7 @@ export default function ShiftSettlementClient() {
           </div>
           <div className="space-y-2">
             <Label htmlFor="other-expenses">Sonstige Ausgaben (EUR)</Label>
-            <Input
+            <Input disabled={saving}
               id="other-expenses"
               type="number"
               min="0"
@@ -308,7 +346,7 @@ export default function ShiftSettlementClient() {
             <div key={entry.key} className="grid gap-3 rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-3 md:grid-cols-[1.4fr_0.8fr_0.8fr_0.8fr_auto]">
               <div className="space-y-1.5">
                 <Label>Name</Label>
-                <Input
+                <Input disabled={saving}
                   value={entry.employeeName}
                   onChange={(event) => {
                     const value = event.target.value;
@@ -319,7 +357,7 @@ export default function ShiftSettlementClient() {
               </div>
               <div className="space-y-1.5">
                 <Label>Von</Label>
-                <Input
+                <Input disabled={saving}
                   type="time"
                   value={entry.shiftStart}
                   onChange={(event) => {
@@ -330,7 +368,7 @@ export default function ShiftSettlementClient() {
               </div>
               <div className="space-y-1.5">
                 <Label>Bis</Label>
-                <Input
+                <Input disabled={saving}
                   type="time"
                   value={entry.shiftEnd}
                   onChange={(event) => {
@@ -341,7 +379,7 @@ export default function ShiftSettlementClient() {
               </div>
               <div className="space-y-1.5">
                 <Label>Stundensatz EUR</Label>
-                <Input
+                <Input disabled={saving}
                   type="number"
                   min="0"
                   step="0.01"
@@ -357,7 +395,7 @@ export default function ShiftSettlementClient() {
                   type="button"
                   variant="outline"
                   onClick={() => removeEntry(entry.key)}
-                  disabled={entries.length <= 1 && index === 0}
+                  disabled={saving || (entries.length <= 1 && index === 0)}
                 >
                   Entfernen
                 </Button>
@@ -365,13 +403,24 @@ export default function ShiftSettlementClient() {
             </div>
           ))}
           <div className="flex gap-2">
-            <Button type="button" variant="secondary" onClick={addEntry}>Mitarbeiter hinzufügen</Button>
-            <Button type="button" onClick={() => void saveSettlement()} disabled={saving}>
+            <Button type="button" variant="secondary" onClick={addEntry} disabled={saving}>Mitarbeiter hinzufügen</Button>
+            <Button type="button" onClick={() => void saveSettlement()} disabled={saving || conflict || settlement?.settlementDate !== selectedDate}>
               {saving ? "Speichere..." : "Schichtabrechnung speichern"}
             </Button>
           </div>
         </CardContent>
       </Card>
+
+      {conflict && <section role="alert" className="rounded-lg border border-amber-500/50 p-4 space-y-3">
+        <p>Konflikt: Dein Entwurf oben wurde nicht überschrieben.</p>
+        {latestSettlement ? <>
+          <p>Serverstand: Kassenbestand {formatCurrency(latestSettlement.openingCash)}, Ausgaben {formatCurrency(latestSettlement.otherExpenses)}.</p>
+          <ul>{latestSettlement.entries.map(entry => <li key={entry.id}>
+            {entry.employeeName}: {entry.shiftStart}–{entry.shiftEnd}, {formatCurrency(entry.hourlyWage)}/h
+          </li>)}</ul>
+          <Button onClick={acceptServerSettlement}>Serverstand übernehmen und Entwurf verwerfen</Button>
+        </> : <Button onClick={() => void loadConflict()}>Serverstand erneut laden</Button>}
+      </section>}
 
       <section className="grid gap-4 sm:grid-cols-3">
         <Card className="border-cyan-500/20">
