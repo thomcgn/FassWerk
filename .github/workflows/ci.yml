@@ -117,7 +117,7 @@ jobs:
           if-no-files-found: error
 
       - name: Scan packaged Java dependencies
-        uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2 # v7
+        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
         with:
           path: backend/target/
           fail-build: true
@@ -247,7 +247,7 @@ jobs:
         run: ./scripts/container-smoke.sh
 
       - name: Scan backend image
-        uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2 # v7
+        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
         with:
           image: fasswerk/backend:${{ env.FASSWERK_IMAGE_TAG }}
           fail-build: true
@@ -258,7 +258,7 @@ jobs:
 
       - name: Scan frontend image
         if: ${{ !cancelled() }}
-        uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2 # v7
+        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
         with:
           image: fasswerk/frontend:${{ env.FASSWERK_IMAGE_TAG }}
           fail-build: true
