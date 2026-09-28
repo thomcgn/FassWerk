@@ -1,6 +1,7 @@
 package org.thomcgn.backend.inventory.service;
 
 import lombok.RequiredArgsConstructor;
+import org.thomcgn.backend.common.logging.SafeExceptionDetails;
 import org.thomcgn.backend.common.exception.NotFoundException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -124,7 +125,8 @@ public class ReorderCalculationService {
                     successCount++;
                 }
             } catch (Exception e) {
-                log.error("Error calculating reorder for inventory item {}: {}", item.getId(), e.getMessage(), e);
+                log.atError().addKeyValue("diagnostic", SafeExceptionDetails.describe(e))
+                        .log("reorder_calculation_failed");
                 failureCount++;
             }
         }

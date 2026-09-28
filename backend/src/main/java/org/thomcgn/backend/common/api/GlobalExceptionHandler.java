@@ -1,6 +1,9 @@
 package org.thomcgn.backend.common.api;
 
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.extern.slf4j.Slf4j;
+import org.slf4j.event.Level;
+import org.thomcgn.backend.common.logging.SafeExceptionDetails;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpHeaders;
@@ -21,11 +24,13 @@ import java.time.Instant;
 import java.util.stream.Collectors;
 
 /** Keeps the existing error envelope while retaining Spring MVC status codes and headers. */
+@Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<ApiErrorResponse> handleApiException(ApiException exception, HttpServletRequest request) {
         HttpStatus status = exception.getStatus();
+        if (status.is5xxServerError()) logFailure(exception, Level.ERROR);
         String message = status.is5xxServerError() ? "Unexpected server error" : exception.getMessage();
         return ResponseEntity.status(status).body(error(status, message, request));
     }
@@ -48,14 +53,28 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ApiErrorResponse> handleDataConflict(DataIntegrityViolationException exception,
             HttpServletRequest request) {
+        logFailure(exception, Level.WARN);
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(error(HttpStatus.CONFLICT, "Request conflicts with existing data", request));
     }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiErrorResponse> handleUnhandled(Exception exception, HttpServletRequest request) {
+        logFailure(exception, Level.ERROR);
         return ResponseEntity.internalServerError()
                 .body(error(HttpStatus.INTERNAL_SERVER_ERROR, "Unexpected server error", request));
+    }
+
+    private void logFailure(Exception exception, Level level) {
+        log.atLevel(level).addKeyValue("diagnostic", SafeExceptionDetails.describe(exception))
+                .log("api_processing_failed");
+    }
+
+    @Override
+    protected ResponseEntity<Object> handleExceptionInternal(Exception exception, Object body,
+            HttpHeaders headers, HttpStatusCode status, WebRequest request) {
+        if (status.is5xxServerError()) logFailure(exception, Level.ERROR);
+        return super.handleExceptionInternal(exception, body, headers, status, request);
     }
 
     @Override

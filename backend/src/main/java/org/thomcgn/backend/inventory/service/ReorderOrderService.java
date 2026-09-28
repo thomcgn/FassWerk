@@ -89,7 +89,7 @@ public class ReorderOrderService {
         order.setNotes(request.notes());
 
         ReorderOrder saved = reorderOrderRepository.save(order);
-        log.info("Created reorder order #{} for supplier {} on {}", saved.getId(), supplier.getName(), request.scheduledDeliveryDate());
+        log.info("Created reorder order #{} on {}", saved.getId(), request.scheduledDeliveryDate());
 
         return toReorderOrderResponse(saved);
     }

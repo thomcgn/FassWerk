@@ -315,3 +315,19 @@ extended native-library/Compose smoke all pass. Local Phase-12 status now PASS.
 Medium/low OS advisories remain tracked; GitHub execution and branch protection
 remain external verification. See
 [SECURITY_DEPENDENCY_REMEDIATION.md](SECURITY_DEPENDENCY_REMEDIATION.md).
+
+## Fortschritt Phase 13 (2026-09-28)
+
+- Phase 12: CI #35 laut Nutzer erfolgreich. Das ersetzt keine separate Prüfung
+  der Branch-Protection-Konfiguration.
+- TD-034: Prometheus-Registry eingebunden, strukturierte Produktionslogs mit
+  Request-ID und sicherer Fehlerdiagnose ergänzt. Health-Zugriff, ADMIN-Schutz,
+  JVM-/HTTP-/Hikari-Metriken sowie Token-/Payload-Redaktion werden gegen einen
+  echten HTTP-Server mit PostgreSQL geprüft. Reservierungsmails besitzen feste
+  Outcome-Zähler; Reservierungsfehler nutzen vorhandene HTTP-Statusmetriken.
+- Betrieb: externer Scraper/Collector, Alarmzustellung, separater Scrape-Zugang
+  und Scheduler-Heartbeat-Alarme bleiben einzurichten; die Anwendungssignale
+  allein sind kein Nachweis für funktionierende Produktionsalarme.
+
+Details und Prüfergebnisse: [PHASE_13_REPORT.md](PHASE_13_REPORT.md),
+[Monitoring und Alerting](../operations/monitoring-alerting.md).

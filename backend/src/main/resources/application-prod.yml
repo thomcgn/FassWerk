@@ -1,0 +1,14 @@
+# Boot's native JSON logging includes the validated requestId from MDC.
+logging:
+  structured:
+    format:
+      console: ecs
+  level:
+    # PostgreSQL errors can contain rejected row values. The API advice emits
+    # safe exception types/locations instead; HTTP status metrics remain enabled.
+    org.hibernate.orm.jdbc.error: "OFF"
+spring:
+  devtools:
+    add-properties: false
+  jpa:
+    show-sql: false

@@ -95,3 +95,11 @@ See the upgrade procedure in [configuration.md](../docs/configuration.md).
 - `DELETE /api/auth/sessions/{id}` -> revoke one session
 - `POST /api/auth/logout-all` -> revoke all active sessions for current user
 
+## Observability
+
+Profil `prod` aktiviert ECS-JSON-Logs mit `requestId`. Actuator liefert JVM-,
+HTTP-/Latenz- und Hikari-Metriken über den ADMIN-geschützten Prometheus-Endpunkt.
+Reservierungsmails haben separate Zähler für `sent`, `failed` und `skipped`.
+Der öffentliche Health-Endpunkt zeigt keine internen Details.
+Scrape-Zugang, PromQL-Beispiele, Datenschutz und Diagnose:
+[Monitoring und Alerting](../docs/operations/monitoring-alerting.md).

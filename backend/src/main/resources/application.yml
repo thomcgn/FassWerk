@@ -37,6 +37,14 @@ server:
   shutdown: graceful
 
 management:
+  endpoint:
+    health:
+      show-details: never
+      show-components: never
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
   health:
     mail:
       enabled: ${RESERVATION_MAIL_ENABLED:false}
