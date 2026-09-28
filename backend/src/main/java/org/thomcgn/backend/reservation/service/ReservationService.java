@@ -125,20 +125,20 @@ public class ReservationService implements org.thomcgn.backend.reservation.appli
         Reservation reservation = getById(id);
         if (reservation.getStatus() == ReservationStatus.COMPLETED) return reservation;
         if (reservation.getStatus() != ReservationStatus.CHECKED_IN) throw new ConflictException("Only checked-in reservations can be completed");
-        if (reservation.getAssignedTables().isEmpty() || !billing.settledTableIds(id).containsAll(tableIds(reservation)))
-            throw new ConflictException("Reservation remains occupied until every table bill is fully paid");
+        if (reservation.getAssignedTables().isEmpty() || !billing.releasedTableIds(id).containsAll(tableIds(reservation)))
+            throw new ConflictException("Reservation remains occupied until every table bill is paid or explicitly archived");
         reservation.setStatus(ReservationStatus.COMPLETED);
         return reservationRepository.save(reservation);
     }
 
     @org.springframework.context.event.EventListener
     @Transactional(propagation = org.springframework.transaction.annotation.Propagation.MANDATORY)
-    public void onTableOrderPaid(org.thomcgn.backend.billing.application.TableOrderPaid event) {
+    public void onTableVisitEnded(org.thomcgn.backend.billing.application.TableVisitEnded event) {
         if (event.reservationId() == null) return;
         var reservation = getById(event.reservationId());
         if (reservation.getStatus() == ReservationStatus.CHECKED_IN
                 && !reservation.getAssignedTables().isEmpty()
-                && billing.settledTableIds(reservation.getId()).containsAll(tableIds(reservation))) {
+                && billing.releasedTableIds(reservation.getId()).containsAll(tableIds(reservation))) {
             reservation.setStatus(ReservationStatus.COMPLETED);
         }
     }
@@ -201,8 +201,8 @@ public class ReservationService implements org.thomcgn.backend.reservation.appli
 
     private List<Long> heldTableIds(Reservation r) {
         if (r.getStatus() != ReservationStatus.CHECKED_IN) return tableIds(r);
-        var paid = billing.settledTableIds(r.getId());
-        return tableIds(r).stream().filter(id -> !paid.contains(id)).toList();
+        var released = billing.releasedTableIds(r.getId());
+        return tableIds(r).stream().filter(id -> !released.contains(id)).toList();
     }
 
     private LocalDate businessDate(Reservation r) {
@@ -249,7 +249,7 @@ public class ReservationService implements org.thomcgn.backend.reservation.appli
     private boolean isCheckInAllowed(Reservation r) {
         if (r.getStatus() != ReservationStatus.CONFIRMED || r.getCheckedInAt() != null
                 || r.getStartsAt() == null || r.getAssignedTables().isEmpty()) return false;
-        // Arrival grace is independent of stay length; payment alone ends a checked-in hold.
+        // Arrival grace is independent of stay length; payment or explicit archiving ends a checked-in hold.
         Duration grace = Duration.between(r.getStartsAt(), deadline(r));
         return !reservationClock.instant().isBefore(r.getStartsAt().minus(grace))
                 && reservationClock.instant().isBefore(deadline(r));

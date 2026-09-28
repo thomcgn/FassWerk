@@ -46,7 +46,7 @@ test("reservierung: PENDING -> CONFIRMED/REJECTED -> CHECKED_IN", async ({ page 
   await annaCard.getByRole("button", { name: "Check-in" }).click();
   await expect(annaCard.getByRole("button", { name: "Check-in" })).toHaveCount(0);
   await expect(annaCard.getByRole("button", { name: "Abschliessen" })).toHaveCount(0);
-  await expect(annaCard.getByText("Tische bleiben bis zur Bezahlung belegt.")).toBeVisible();
+  await expect(annaCard.getByText("Tische bleiben bis zur Bezahlung oder zum Archivieren des Deckels belegt.")).toBeVisible();
 
   await benCard.getByRole("button", { name: "Ablehnen" }).click();
   await page.locator("textarea").fill("Slot intern nicht verfügbar");

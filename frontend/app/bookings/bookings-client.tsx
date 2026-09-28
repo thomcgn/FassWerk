@@ -238,7 +238,7 @@ export default function BookingsClient({ isAuthenticated }: Props) {
                       {settings.openingHours.map(window => <span key={window.weekday} className="block">
                         {window.weekday}: {window.open ? `${window.from?.slice(0, 5)} - ${window.to?.slice(0, 5)}${window.secondFrom ? ` / ${window.secondFrom.slice(0, 5)} - ${window.secondTo?.slice(0, 5)}` : ""}` : "geschlossen"}
                       </span>)}
-                      <span className="mt-2 block">Zeitzone: {settings.timezone}. Kein festes Aufenthaltslimit. Ohne Check-in Verfall nach {settings.graceMinutes} Minuten; belegte Tische werden erst nach Bezahlung frei.</span>
+                      <span className="mt-2 block">Zeitzone: {settings.timezone}. Kein festes Aufenthaltslimit. Ohne Check-in Verfall nach {settings.graceMinutes} Minuten; belegte Tische werden durch Bezahlung oder Archivieren des Deckels frei.</span>
                     </> : <span className="block">Die aktuellen Buchungszeiten werden beim Senden serverseitig geprueft.</span>}
                   </>
                 )}

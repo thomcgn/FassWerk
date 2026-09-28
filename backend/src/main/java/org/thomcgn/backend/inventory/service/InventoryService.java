@@ -64,7 +64,7 @@ public class InventoryService {
 
     @Transactional
     public InventoryItemResponse updateItem(Long id, InventoryItemRequest request) {
-        InventoryItem item = findItem(id);
+        InventoryItem item = findItemForUpdate(id);
         applyRequest(item, request);
         InventoryItem saved = inventoryItemRepository.save(item);
         return toItemResponse(saved);
@@ -72,7 +72,7 @@ public class InventoryService {
 
     @Transactional
     public void deleteItem(Long id) {
-        InventoryItem item = findItem(id);
+        InventoryItem item = findItemForUpdate(id);
         // Löse Verknüpfung zum Getränk auf statt zu löschen
         // Dadurch wird im Bar Admin wieder die Warnung angezeigt
         item.setLinkedDrink(null);
@@ -83,14 +83,34 @@ public class InventoryService {
 
     @Transactional
     public InventoryItemResponse adjust(Long id, InventoryAdjustmentRequest request, String actor) {
-        InventoryItem item = findItem(id);
+        return adjust(id, request, actor, null);
+    }
+
+    @Transactional
+    public InventoryItemResponse adjust(Long id, InventoryAdjustmentRequest request, String actor, String idempotencyKey) {
+        InventoryItem item = findItemForUpdate(id);
         BigDecimal delta = request.increase() ? request.amount() : request.amount().negate();
+        String key = org.thomcgn.backend.common.application.IdempotencyKeys.optional(idempotencyKey);
+        if (key != null) {
+            var existing = movementRepository.findByOperationKey(key);
+            if (existing.isPresent()) {
+                var movement = existing.get();
+                if (!movement.getInventoryItem().getId().equals(id)
+                        || movement.getMovementType() != InventoryMovementType.ADJUSTMENT
+                        || movement.getAmount().compareTo(delta) != 0
+                        || !java.util.Objects.equals(movement.getReason(), request.reason())) {
+                    throw new ConflictException("Idempotency-Key was already used for a different inventory command");
+                }
+                return toItemResponse(item);
+            }
+        }
         BigDecimal newStock = item.getTotalStockAmount().add(delta);
         if (newStock.compareTo(BigDecimal.ZERO) < 0) {
             throw new ConflictException("Inventory adjustment would result in negative stock");
         }
 
         item.setTotalStockAmount(newStock);
+        synchronizePackageCount(item);
         inventoryItemRepository.save(item);
 
         createMovement(
@@ -100,7 +120,8 @@ public class InventoryService {
                 request.reason(),
                 InventoryReferenceType.MANUAL,
                 id.toString(),
-                actor
+                actor,
+                key
         );
         return toItemResponse(item);
     }
@@ -148,15 +169,16 @@ public class InventoryService {
 
     @Transactional
     public InventoryItem deductForOrderItem(DrinkVariant variant, BigDecimal amountMl, String referenceId) {
-        assertVariantAvailableForOrder(variant, amountMl);
-        InventoryItem inventoryItem = findInventoryItemForVariant(variant);
+        InventoryItem inventoryItem = findInventoryItemForVariantForUpdate(variant);
         BigDecimal amountInInventoryUnit = convertAmountMlToInventoryUnit(amountMl, inventoryItem);
+        assertAvailable(inventoryItem, amountInInventoryUnit, variant.getId());
         BigDecimal newStock = inventoryItem.getTotalStockAmount().subtract(amountInInventoryUnit);
         if (newStock.compareTo(BigDecimal.ZERO) < 0) {
             throw new ConflictException("Insufficient inventory for variant: " + variant.getId());
         }
 
         inventoryItem.setTotalStockAmount(newStock);
+        synchronizePackageCount(inventoryItem);
         inventoryItemRepository.save(inventoryItem);
 
         createMovement(
@@ -169,17 +191,18 @@ public class InventoryService {
                 "system"
         );
 
-        // Record sale for sales tracking and reorder calculation
-        recordSaleAndUpdateReorder(variant, amountMl, inventoryItem);
+        BigDecimal quantity = amountMl.divide(BigDecimal.valueOf(variant.getVolumeMl()), 4, RoundingMode.HALF_UP);
+        recordSaleAndUpdateReorder(variant, quantity, amountMl, inventoryItem);
 
         return inventoryItem;
     }
 
     @Transactional
     public InventoryItem restockForCancelledOrderItem(DrinkVariant variant, BigDecimal amountMl, String referenceId) {
-        InventoryItem inventoryItem = findInventoryItemForVariant(variant);
+        InventoryItem inventoryItem = findInventoryItemForVariantForUpdate(variant);
         BigDecimal amountInInventoryUnit = convertAmountMlToInventoryUnit(amountMl, inventoryItem);
         inventoryItem.setTotalStockAmount(inventoryItem.getTotalStockAmount().add(amountInInventoryUnit));
+        synchronizePackageCount(inventoryItem);
         inventoryItemRepository.save(inventoryItem);
 
         createMovement(
@@ -191,6 +214,9 @@ public class InventoryService {
                 referenceId,
                 "system"
         );
+        BigDecimal quantity = amountMl.divide(BigDecimal.valueOf(variant.getVolumeMl()), 4, RoundingMode.HALF_UP);
+        drinkSalesTrackingService.reverseSale(variant, quantity, amountMl);
+        reorderCalculationService.calculateReorderAmount(inventoryItem);
         return inventoryItem;
     }
 
@@ -198,11 +224,15 @@ public class InventoryService {
     public void assertVariantAvailableForOrder(DrinkVariant variant, BigDecimal amountMl) {
         InventoryItem inventoryItem = findInventoryItemForVariant(variant);
         BigDecimal amountInInventoryUnit = convertAmountMlToInventoryUnit(amountMl, inventoryItem);
+        assertAvailable(inventoryItem, amountInInventoryUnit, variant.getId());
+    }
+
+    private void assertAvailable(InventoryItem inventoryItem, BigDecimal amount, Long variantId) {
         if (!inventoryItem.isActive()) {
             throw new ConflictException("Drink variant is currently not available in inventory");
         }
-        if (inventoryItem.getTotalStockAmount().compareTo(amountInInventoryUnit) < 0) {
-            throw new ConflictException("Insufficient inventory for variant: " + variant.getId());
+        if (inventoryItem.getTotalStockAmount().compareTo(amount) < 0) {
+            throw new ConflictException("Insufficient inventory for variant: " + variantId);
         }
     }
 
@@ -219,6 +249,11 @@ public class InventoryService {
                 .orElseThrow(() -> new NotFoundException("Inventory item not found: " + id));
     }
 
+    private InventoryItem findItemForUpdate(Long id) {
+        return inventoryItemRepository.findByIdForUpdate(id)
+                .orElseThrow(() -> new NotFoundException("Inventory item not found: " + id));
+    }
+
     public InventoryItem findInventoryItemById(Long id) {
         return findItem(id);
     }
@@ -226,6 +261,22 @@ public class InventoryService {
     private InventoryItem findInventoryItemForVariant(DrinkVariant variant) {
         return inventoryItemRepository.findFirstByLinkedDrinkVariantIdAndActiveTrue(variant.getId())
                 .orElseGet(() -> findInventoryItemForDrink(variant.getDrink().getId(), variant.getId()));
+    }
+
+    private InventoryItem findInventoryItemForVariantForUpdate(DrinkVariant variant) {
+        return inventoryItemRepository.findActiveByVariantIdForUpdate(variant.getId())
+                .orElseGet(() -> findInventoryItemForDrinkForUpdate(variant.getDrink().getId(), variant.getId()));
+    }
+
+    private InventoryItem findInventoryItemForDrinkForUpdate(Long drinkId, Long variantId) {
+        List<InventoryItem> drinkItems = inventoryItemRepository.findActiveByDrinkIdForUpdate(drinkId);
+        if (drinkItems.isEmpty()) {
+            throw new NotFoundException("No inventory item linked to drink " + drinkId + " (variant " + variantId + ")");
+        }
+        if (drinkItems.size() > 1) {
+            throw new ConflictException("Mehrere aktive Lagerartikel sind mit dem Drink verknuepft. Bitte Variante eindeutig verknuepfen.");
+        }
+        return drinkItems.getFirst();
     }
 
     private InventoryItem findInventoryItemForDrink(Long drinkId, Long variantId) {
@@ -248,6 +299,19 @@ public class InventoryService {
             String referenceId,
             String actor
     ) {
+        createMovement(item, movementType, amount, reason, referenceType, referenceId, actor, null);
+    }
+
+    private void createMovement(
+            InventoryItem item,
+            InventoryMovementType movementType,
+            BigDecimal amount,
+            String reason,
+            InventoryReferenceType referenceType,
+            String referenceId,
+            String actor,
+            String operationKey
+    ) {
         InventoryMovement movement = new InventoryMovement();
         movement.setInventoryItem(item);
         movement.setMovementType(movementType);
@@ -257,21 +321,25 @@ public class InventoryService {
         movement.setReferenceType(referenceType);
         movement.setReferenceId(referenceId);
         movement.setCreatedBy(actor);
+        movement.setOperationKey(operationKey);
         movementRepository.save(movement);
     }
 
-    private void recordSaleAndUpdateReorder(DrinkVariant variant, BigDecimal amountMl, InventoryItem inventoryItem) {
-        try {
-            // Record the sale for sales tracking
-            drinkSalesTrackingService.recordSale(variant, BigDecimal.ONE, amountMl);
+    private void recordSaleAndUpdateReorder(
+            DrinkVariant variant,
+            BigDecimal quantity,
+            BigDecimal amountMl,
+            InventoryItem inventoryItem
+    ) {
+        drinkSalesTrackingService.recordSale(variant, quantity, amountMl);
+        reorderCalculationService.calculateReorderAmount(inventoryItem);
+    }
 
-            // Update reorder calculation for this item
-            reorderCalculationService.calculateReorderAmount(inventoryItem);
-        } catch (Exception e) {
-            // Log but don't fail the sale transaction if tracking/calculation fails
-            org.slf4j.LoggerFactory.getLogger(InventoryService.class)
-                    .warn("Failed to record sale or update reorder calculation for variant {}: {}", variant.getId(), e.getMessage());
+    private void synchronizePackageCount(InventoryItem item) {
+        if (item.getContentPerPackage().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BadRequestException("Package content must be positive");
         }
+        item.setPackagesInStock(item.getTotalStockAmount().divide(item.getContentPerPackage(), 2, RoundingMode.HALF_UP));
     }
 
     private void applyRequest(InventoryItem item, InventoryItemRequest request) {

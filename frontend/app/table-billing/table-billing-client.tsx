@@ -261,12 +261,6 @@ export default function TableBillingClient() {
       return;
     }
 
-    const unpaid = unpaidArchive.find(entry => entry.tableId === table.id);
-    if (unpaid) {
-      await fetchOrderById(String(unpaid.id));
-      return;
-    }
-
     const createResponse = await fetch("/api/table-orders/open", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -308,7 +302,7 @@ export default function TableBillingClient() {
     setStatus(null);
     const response = await fetch(`/api/table-orders/${order.id}/items`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() },
       body: JSON.stringify({ drinkVariantId, quantity }),
     });
     if (!response.ok) {
@@ -429,7 +423,7 @@ export default function TableBillingClient() {
     setStatus(null);
     const response = await fetch(`/api/table-orders/${order.id}/split-payment`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() },
       body: JSON.stringify({ items }),
     });
 
@@ -631,7 +625,7 @@ export default function TableBillingClient() {
       <Card>
         <CardHeader>
           <CardTitle>Aktive Tische</CardTitle>
-          <CardDescription>Freie Tische koennen erneut geoeffnet werden. Belegte Tische bleiben bis zur vollstaendigen Bezahlung gesperrt, auch bei unbezahlten archivierten Bons.</CardDescription>
+          <CardDescription>Freie Tische koennen erneut geoeffnet werden. Laufende Bons halten den Tisch belegt. Bezahlen oder einen Deckel unbezahlt archivieren gibt den Tisch frei; der offene Betrag bleibt im Archiv.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
           {actionableTables.map((table) => (

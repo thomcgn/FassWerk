@@ -32,20 +32,24 @@ test("tischbon: position buchen und split-payment durchfuehren", async ({ page }
 
 
 
-test("unpaid archived bill keeps table occupied until reopened and paid", async ({ page }) => {
+test("archived tab frees table for a separate new bill and preserves debt", async ({ page }) => {
   const flowState = createFlowState();
   await mockAuthenticatedSession(page);
   await mockFlowApis(page, flowState);
   await page.goto("/table-billing");
   const table = page.getByRole("button", { name: /T1/ });
   await table.click();
+  await expect(page.getByRole("button", { name: "Zurückstellen", exact: true })).toBeEnabled();
+  const oldId = flowState.orders[0].id;
   await page.getByRole("button", { name: "Zurückstellen", exact: true }).click();
-  await expect(table).toContainText("OCCUPIED");
+  await expect(table).toContainText("FREE");
   await table.click();
   const dialog = page.getByRole("dialog", { name: "Tischdetail" });
-  await expect(dialog.getByRole("button", { name: "Wieder oeffnen", exact: true })).toBeVisible();
-  expect(flowState.orders).toHaveLength(1);
-  await dialog.getByRole("button", { name: "Wieder oeffnen", exact: true }).click();
-  await page.getByRole("button", { name: "Bezahlen", exact: true }).click();
+  await expect(dialog.getByRole("button", { name: "Bezahlen", exact: true })).toBeEnabled();
+  expect(flowState.orders).toHaveLength(2);
+  expect(flowState.orders.find(order => order.id === oldId)?.paid).toBe(false);
+  expect(flowState.orders.find(order => order.id === oldId)?.status).toBe("CLOSED");
+  await dialog.getByRole("button", { name: "Bezahlen", exact: true }).click();
   await expect(table).toContainText("FREE");
+  await expect(page.getByRole("button", { name: `Bon #${oldId} laden`, exact: true })).toBeVisible();
 });

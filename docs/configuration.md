@@ -183,6 +183,16 @@ The 180-minute duration assumption from the original Phase 7 is removed. Public
 reservation settings expose `durationMinutes: null` and `graceMinutes: 30`.
 Legacy database duration/grace columns remain historical/compatibility fields, not
 active policy controls. No-show timing uses elapsed instants in the configured venue
-zone. CHECKED_IN tables remain occupied until full payment, including unpaid archives.
+zone. CHECKED_IN tables remain occupied while their bills are OPEN. Full payment or
+explicit unpaid archiving releases them; archived debts remain unpaid.
 Read `docs/architecture/RESERVATION_RULES.md` before applying V24, especially the
 duplicate-open-bill precheck and review of legacy turnover bookings.
+
+## Phase 8 Request Idempotency
+
+Retry-prone write clients should send a fresh `Idempotency-Key` (8-80 safe ASCII
+characters) for add-item, split-payment, and manual inventory adjustment requests.
+Keep the same key only when retrying the exact same command. Reusing it with another
+payload or resource returns HTTP 409. This is an HTTP contract, not an environment
+setting; no secret or new runtime variable is required. See
+`docs/architecture/BILLING_INVENTORY_RULES.md`.

@@ -120,8 +120,9 @@ fachlichen Kontexte. Kein neuer globaler administration- oder shared-business-Or
   Die Entitaeten werden getrennt gespeichert; TableOrder referenziert TableEntity
   und Reservation, Positionen referenzieren die aktuelle DrinkVariant.
   Ein eigenes Invoice-, Payment- oder PaymentAttempt-Aggregat existiert nicht.
-- Value Objects: TableOrderStatus-Enum, BigDecimal-Preise und -Volumina,
-  Integer-Mengen; kein Money-/PaymentId-/IdempotencyKey-Value-Object.
+- Value Objects: TableOrderStatus, `Money` fuer kanonische EUR-Skalierung,
+  BigDecimal-Volumina und Integer-Mengen. Persistierte `BillingOperation`-Schluessel
+  sichern Add-/Split-Wiederholungen; ein separates Payment-Aggregat existiert nicht.
   PaidOrderRevenue ist ab Phase 4 ein unveraenderliches **Lesemodell**, keine Entity
   und kein neues Domain-Value-Object.
 - Application Services/Use Cases: TableOrderService fuer Oeffnen, Positionen buchen/
@@ -130,9 +131,9 @@ fachlichen Kontexte. Kein neuer globaler administration- oder shared-business-Or
 - Repositories: TableOrderRepository und TableOrderItemRepository; ausschliesslich
   Billing entscheidet im neuen Umsatzvertrag ueber CLOSED/paid und persistente Auswahl.
 - REST: TableOrderController, `/api/table-orders`.
-- Events: OrderOpened, ItemAdded/Removed, OrderClosed, PaymentSplit und
-  OrderReopened sind Kandidaten, derzeit nicht implementiert. Bestand wird synchron
-  ueber InventoryService geaendert, nicht durch asynchrone Eventverarbeitung.
+- Events: `TableVisitEnded` koppelt das Ende physischer Belegung an Reservation.
+  Position, Bestand, Journal, Absatz und Nachbestellung bleiben bewusst synchron in
+  einer Transaktion; es gibt keinen asynchronen Zahlungs-/Bestands-Eventbus.
 - Erlaubte Abhaengigkeiten: eigene Persistenz/common; Katalogauskunft, Reservierungs-
   referenz, Tischstatusvertrag und Bestandsbefehle als Application-Grenzen.
   Ist-Ausnahmen: direkte Menu-/Reservation-/Table-Repositories und fremde JPA-Entities;
@@ -168,9 +169,10 @@ fachlichen Kontexte. Kein neuer globaler administration- oder shared-business-Or
 - Erlaubte Abhaengigkeiten: eigene Persistenz/common sowie lesende Catalog-Vertraege.
   Ist-Ausnahmen: Menu-Repositories und JPA-Referenzen auf Drink/DrinkVariant.
   Inventory darf keine Billing-Positionen selbst veraendern.
-- Offene Grenzen: verlorene Updates, Einheiten, Idempotenz und Aggregationsschluessel
-  (NULL-Varianten) bleiben Phase 8. Beschaffung bleibt vorerst internes Teilgebiet,
-  kein neuer Maven-/Microservice-Schnitt.
+- Phase-8-Grenze: Bestandszeilen sind pessimistisch gesperrt, Add/Split/Korrektur
+  idempotent, Wochenaggregation retry-sicher und Nachbestelleinheiten vereinheitlicht.
+  NULL-Varianten aus Legacy-Aggregaten und die direkte Menu-JPA-Kopplung bleiben offen.
+  Beschaffung bleibt internes Teilgebiet, kein neuer Maven-/Microservice-Schnitt.
 
 ## 7. Shift Settlement
 
@@ -330,7 +332,17 @@ See `RESERVATION_RULES.md` for invariants and rollout requirements.
 The original 180-minute model is superseded: `ReservationRules` provides a fixed
 30-minute no-show deadline but no stay limit. `ReservationBilling` is the application
 port into billing; its adapter creates group table bills during the check-in transaction.
-`TableOrderPaid` is a synchronous in-transaction event completing a group only when
-all its tables are paid. Per-table release permits reuse before the whole group
+`TableVisitEnded` is a synchronous in-transaction event completing the visit when
+all table bills are CLOSED (paid or explicitly archived unpaid). Debt remains
+separate from physical occupancy. Per-table release permits reuse before the whole group
 finishes. Walk-in, reservation and billing writers share `BookingMutationLock`.
-See the updated `RESERVATION_RULES.md`; this is not a full Phase 8 completion.
+See the updated `RESERVATION_RULES.md`. This follow-up was not a full Phase 8
+completion; the later Phase-8 boundary is documented below.
+
+## Phase 8 Transaction Boundary (2026-09-28)
+
+Billing owns money, persisted request replay, bill state, split receipts and table
+release. Inventory owns available quantity, movement journal, sales projection and
+reorder calculation. The synchronous Billing -> Inventory command intentionally
+shares the caller transaction: no side may commit a half operation. Catalog retirement
+preserves Billing history. See `BILLING_INVENTORY_RULES.md` and `PHASE_8_REPORT.md`.

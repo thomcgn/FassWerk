@@ -32,7 +32,7 @@ public class ReservationBillingAdapter implements ReservationBilling {
         var existing = orders.findAllByReservationId(reservationId);
         var occupied = occupiedTableIds();
         for (Long tableId : tableIds) {
-            // Retries must not reopen paid tables or create duplicate bills.
+            // Retries must not reopen closed table visits or create duplicate bills.
             if (existing.stream().anyMatch(order -> order.getTable().getId().equals(tableId))) continue;
             var table = tables.findById(tableId).orElseThrow(() -> new NotFoundException("Table not found: " + tableId));
             if (!table.isActive() || table.getStatus() != TableStatus.FREE || occupied.contains(tableId))
@@ -54,14 +54,14 @@ public class ReservationBillingAdapter implements ReservationBilling {
     }
 
     @Override
-    public Set<Long> settledTableIds(Long reservationId) {
-        var settled = new HashSet<Long>();
-        var unpaid = new HashSet<Long>();
+    public Set<Long> releasedTableIds(Long reservationId) {
+        var released = new HashSet<Long>();
+        var open = new HashSet<Long>();
         for (var order : orders.findAllByReservationId(reservationId)) {
-            if (order.getStatus() == TableOrderStatus.CLOSED && order.isPaid()) settled.add(order.getTable().getId());
-            else unpaid.add(order.getTable().getId());
+            if (order.getStatus() == TableOrderStatus.CLOSED) released.add(order.getTable().getId());
+            else open.add(order.getTable().getId());
         }
-        settled.removeAll(unpaid);
-        return settled;
+        released.removeAll(open);
+        return released;
     }
 }

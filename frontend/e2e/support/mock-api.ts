@@ -577,7 +577,7 @@ export async function mockFlowApis(page: Page, state: FlowState) {
     order.status = "CLOSED";
     order.paid = false;
     order.closedAt = stableIsoTimestamp();
-    setTableStatus(state, order.tableId, "OCCUPIED");
+    setTableStatus(state, order.tableId, "FREE");
     await json(route, cloneOrder(order));
   });
 

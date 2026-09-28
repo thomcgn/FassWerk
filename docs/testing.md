@@ -189,7 +189,8 @@ package type besitzt; die drei Tests bestehen. Warnungen werden nicht unterdruec
 - ReservationCapacityMigrationTest: V22 -> V23 preserves old assignments and leaves
   unknown capacities/snapshots NULL; fresh PostgreSQL applies 16 migrations.
 - The former reservation double-booking knownGap is now a concurrency invariant.
-  Three billing/inventory knownGap reproductions remain for Phase 8.
+  The later Phase-8 suite converts the remaining billing/inventory known gaps into
+  correctness assertions; see the Phase-8 section below.
 - Browser tests include explicit QR scan/check-in, denied scan without guest data
   and explicit seat entry. Business UI tests mock APIs; they are not full-stack
   tests. The backend HTTP contract is tested independently.
@@ -209,13 +210,36 @@ them through the real protected endpoints.
 ReservationPaymentMigrationTest verifies V23 -> V24, preservation of historical
 snapshots, unbounded new reservations and the unique OPEN-bill constraint. A second
 case verifies that historical duplicate OPEN bills block migration without deleting
-financial records. Fresh PostgreSQL now applies 17 migrations.
+financial records. At this historical checkpoint fresh PostgreSQL applied 17 migrations; Phase 8
+adds V25 and the fresh-schema total is now 18.
 
-Duplicate-open and double-split-payment concurrency tests now assert safe outcomes.
-The independent inventory-adjustment lost-update knownGap remains, so these changes
-do not constitute completion of the full Phase 8 inventory work.
+Duplicate-open, double-split-payment, and inventory-adjustment concurrency tests
+now assert safe outcomes. The payment follow-up was historically incomplete; the
+Phase-8 section below records the completed inventory gate.
 
 Browser tests also verify no manual reservation-completion button, reuse of a table
 after the final split payment, and unpaid archival/reopening without replacement
 bills. Business browser tests remain mocked; actual backend state is covered by the
 independent PostgreSQL and HTTP integration tests.
+
+
+## Archived Deckel Correction
+
+ReservationLifecycleIntegrationTest now verifies that explicit unpaid archiving
+releases a table without marking the bill paid; elapsed time and partial payment
+alone still do not release it. Additional cases cover a new group on the released
+table, debt preservation after the new group pays, blocked old-deckel reopening
+while a new reservation/table bill holds it, separate walk-in bills and rollback
+of archival plus reservation completion. Browser coverage verifies a new bill is
+opened instead of silently loading the archived deckel.
+
+## Phase 8 Billing and Inventory
+
+`BillingInventoryPhase8IntegrationTest` runs against PostgreSQL and verifies canonical
+rounding, multiple positions, idempotent add/split/adjust, exact-zero and insufficient
+stock, complete transaction rollback, 1 ml precision, sales quantities/cancellation,
+weekly retry behavior, reorder units and preservation of paid history.
+`ConcurrentWritesCharacterizationTest` now treats the former stock lost-update case as
+a correctness assertion. `BillingInventoryMigrationTest` upgrades V24 to V25 and
+checks precision plus the nonnegative-stock database guard. The complete gate is
+`cd backend && ./mvnw -B clean verify`; Docker is required.

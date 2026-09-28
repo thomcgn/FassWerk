@@ -13,6 +13,8 @@ import org.thomcgn.backend.billing.api.dto.TableOrderResponse;
 import org.thomcgn.backend.billing.domain.TableOrder;
 import org.thomcgn.backend.billing.domain.TableOrderItem;
 import org.thomcgn.backend.billing.domain.TableOrderStatus;
+import org.thomcgn.backend.billing.domain.BillingOperation;
+import org.thomcgn.backend.billing.application.Money;
 import org.thomcgn.backend.common.exception.BadRequestException;
 import org.thomcgn.backend.billing.repository.TableOrderItemRepository;
 import org.thomcgn.backend.billing.repository.TableOrderRepository;
@@ -35,12 +37,15 @@ import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Comparator;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
 public class TableOrderService {
 
     private final TableOrderRepository orderRepository;
+    private final org.thomcgn.backend.billing.repository.BillingOperationRepository operationRepository;
     private final TableOrderItemRepository itemRepository;
     private final TableRepository tableRepository;
     private final ReservationRepository reservationRepository;
@@ -58,8 +63,8 @@ public class TableOrderService {
                 .orElseThrow(() -> new NotFoundException("Table not found: " + request.tableId()));
 
         if (!table.isActive()) throw new ConflictException("Table is inactive");
-        if (orderRepository.hasUnsettledOrders(table.getId()))
-            throw new ConflictException("Table has an open or unpaid bill");
+        if (orderRepository.hasOpenOrders(table.getId()))
+            throw new ConflictException("Table already has an open bill");
         if (request.reservationId() != null)
             throw new ConflictException("Use reservation check-in to open its table bills");
         reservationUsage.assertWalkInAvailable(table.getId());
@@ -78,7 +83,16 @@ public class TableOrderService {
 
     @Transactional
     public TableOrderResponse addItem(Long orderId, AddTableOrderItemRequest request) {
+        return addItem(orderId, request, null);
+    }
+
+    @Transactional
+    public TableOrderResponse addItem(Long orderId, AddTableOrderItemRequest request, String idempotencyKey) {
         bookingLock.acquire();
+        String fingerprint = org.thomcgn.backend.common.application.IdempotencyKeys.fingerprint(
+                request.drinkVariantId() + ":" + request.quantity());
+        var replay = replay(idempotencyKey, "ADD_ITEM", orderId, fingerprint);
+        if (replay.isPresent()) return toResponse(replay.get().getOrder());
         TableOrder order = getOpenOrder(orderId);
         DrinkVariant variant = drinkVariantRepository.findById(request.drinkVariantId())
                 .orElseThrow(() -> new NotFoundException("Drink variant not found: " + request.drinkVariantId()));
@@ -89,20 +103,18 @@ public class TableOrderService {
 
         BigDecimal quantity = BigDecimal.valueOf(request.quantity());
         BigDecimal deductedVolumeMl = BigDecimal.valueOf(variant.getVolumeMl()).multiply(quantity);
-        BigDecimal unitPrice = variant.isUseVolumeStandardPrice()
+        BigDecimal unitPrice = Money.amount(variant.isUseVolumeStandardPrice()
                 ? volumePriceRepository.findByVolumeMl(variant.getVolumeMl())
                         .map(volumePrice -> volumePrice.getPrice())
                         .orElse(variant.getPrice())
-                : variant.getPrice();
-
-        inventoryService.assertVariantAvailableForOrder(variant, deductedVolumeMl);
+                : variant.getPrice());
 
         TableOrderItem savedItem = itemRepository.findFirstByTableOrderIdAndDrinkVariantId(order.getId(), variant.getId())
                 .map(existingItem -> {
                     int newQuantity = existingItem.getQuantity() + request.quantity();
                     existingItem.setQuantity(newQuantity);
                     existingItem.setUnitPrice(unitPrice);
-                    existingItem.setTotalPrice(unitPrice.multiply(BigDecimal.valueOf(newQuantity)));
+                    existingItem.setTotalPrice(Money.multiply(unitPrice, newQuantity));
                     existingItem.setDeductedVolumeMl(existingItem.getDeductedVolumeMl().add(deductedVolumeMl));
                     return itemRepository.save(existingItem);
                 })
@@ -112,13 +124,13 @@ public class TableOrderService {
                     item.setDrinkVariant(variant);
                     item.setQuantity(request.quantity());
                     item.setUnitPrice(unitPrice);
-                    item.setTotalPrice(unitPrice.multiply(quantity));
+                    item.setTotalPrice(Money.multiply(unitPrice, request.quantity()));
                     item.setDeductedVolumeMl(deductedVolumeMl);
                     return itemRepository.save(item);
                 });
 
         inventoryService.deductForOrderItem(variant, deductedVolumeMl, savedItem.getId().toString());
-
+        recordOperation(idempotencyKey, "ADD_ITEM", order, fingerprint, null);
         return toResponse(order);
     }
 
@@ -144,8 +156,8 @@ public class TableOrderService {
         } else {
             int remainingQuantity = item.getQuantity() - 1;
             item.setQuantity(remainingQuantity);
-            item.setTotalPrice(item.getUnitPrice().multiply(BigDecimal.valueOf(remainingQuantity)));
-            item.setDeductedVolumeMl(unitDeductedVolume.multiply(BigDecimal.valueOf(remainingQuantity)).setScale(2, RoundingMode.HALF_UP));
+            item.setTotalPrice(Money.multiply(item.getUnitPrice(), remainingQuantity));
+            item.setDeductedVolumeMl(unitDeductedVolume.multiply(BigDecimal.valueOf(remainingQuantity)).setScale(4, RoundingMode.HALF_UP));
             itemRepository.save(item);
         }
 
@@ -155,29 +167,33 @@ public class TableOrderService {
     @Transactional
     public TableOrderResponse close(Long orderId) {
         bookingLock.acquire();
-        TableOrder order = getOpenOrder(orderId);
+        TableOrder order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new NotFoundException("Table order not found: " + orderId));
+        if (order.getStatus() == TableOrderStatus.CLOSED && order.isPaid()) return toResponse(order);
+        if (order.getStatus() != TableOrderStatus.OPEN) throw new ConflictException("Unpaid archived bill must be reopened before payment");
         order.setStatus(TableOrderStatus.CLOSED);
         order.setPaid(true);
         order.setClosedAt(LocalDateTime.now());
 
         orderRepository.saveAndFlush(order);
-        releaseAfterPayment(order);
+        releaseAfterClose(order);
         return toResponse(order);
     }
 
     @Transactional
     public TableOrderResponse markUnpaid(Long orderId) {
         bookingLock.acquire();
-        TableOrder order = getOpenOrder(orderId);
+        TableOrder order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new NotFoundException("Table order not found: " + orderId));
+        if (order.getStatus() == TableOrderStatus.CLOSED && !order.isPaid()) return toResponse(order);
+        if (order.getStatus() != TableOrderStatus.OPEN) throw new ConflictException("Paid bill cannot be archived as unpaid");
         order.setStatus(TableOrderStatus.CLOSED);
         order.setPaid(false);
         order.setClosedAt(LocalDateTime.now());
 
-        TableEntity table = order.getTable();
-        table.setStatus(TableStatus.OCCUPIED);
-        tableRepository.save(table);
-
-        return toResponse(orderRepository.save(order));
+        orderRepository.saveAndFlush(order);
+        releaseAfterClose(order);
+        return toResponse(order);
     }
 
     @Transactional
@@ -186,6 +202,7 @@ public class TableOrderService {
         TableOrder order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new NotFoundException("Table order not found: " + orderId));
 
+        if (order.getStatus() == TableOrderStatus.OPEN) return toResponse(order);
         if (order.getStatus() != TableOrderStatus.CLOSED || order.isPaid()) {
             throw new ConflictException("Only unpaid archived table orders can be reopened");
         }
@@ -194,6 +211,9 @@ public class TableOrderService {
                 .ifPresent(existing -> {
                     throw new ConflictException("Table already has an open order: " + existing.getId());
                 });
+
+        if (!order.getTable().isActive()) throw new ConflictException("Table is inactive");
+        reservationUsage.assertWalkInAvailable(order.getTable().getId());
 
         order.setStatus(TableOrderStatus.OPEN);
         order.setPaid(false);
@@ -269,7 +289,22 @@ public class TableOrderService {
 
     @Transactional
     public SplitTableOrderPaymentResponse splitPayment(Long orderId, SplitTableOrderPaymentRequest request) {
+        return splitPayment(orderId, request, null);
+    }
+
+    @Transactional
+    public SplitTableOrderPaymentResponse splitPayment(Long orderId, SplitTableOrderPaymentRequest request, String idempotencyKey) {
         bookingLock.acquire();
+        String canonical = request.items() == null ? "null" : request.items().stream()
+                .sorted(Comparator.comparing(SplitTableOrderItemRequest::itemId))
+                .map(item -> item.itemId() + ":" + item.quantity())
+                .reduce((left, right) -> left + "," + right).orElse("");
+        String fingerprint = org.thomcgn.backend.common.application.IdempotencyKeys.fingerprint(canonical);
+        var replay = replay(idempotencyKey, "SPLIT_PAYMENT", orderId, fingerprint);
+        if (replay.isPresent()) {
+            if (replay.get().getResultOrder() == null) throw new ConflictException("Stored split result is incomplete");
+            return new SplitTableOrderPaymentResponse(toResponse(replay.get().getOrder()), toResponse(replay.get().getResultOrder()));
+        }
         TableOrder openOrder = getOpenOrder(orderId);
         if (request.items() == null || request.items().isEmpty()) {
             throw new BadRequestException("Split payment requires at least one item");
@@ -314,7 +349,6 @@ public class TableOrderService {
         for (Map.Entry<Long, Integer> splitEntry : requestedQuantitiesByItem.entrySet()) {
             TableOrderItem openItem = openItemsById.get(splitEntry.getKey());
             int paidQuantity = splitEntry.getValue();
-            BigDecimal paidQuantityDecimal = BigDecimal.valueOf(paidQuantity);
             BigDecimal unitDeductedVolume = openItem.getDeductedVolumeMl().divide(
                     BigDecimal.valueOf(openItem.getQuantity()),
                     4,
@@ -326,18 +360,17 @@ public class TableOrderService {
             paidItem.setDrinkVariant(openItem.getDrinkVariant());
             paidItem.setQuantity(paidQuantity);
             paidItem.setUnitPrice(openItem.getUnitPrice());
-            paidItem.setTotalPrice(openItem.getUnitPrice().multiply(paidQuantityDecimal));
-            paidItem.setDeductedVolumeMl(unitDeductedVolume.multiply(paidQuantityDecimal).setScale(2, RoundingMode.HALF_UP));
+            paidItem.setTotalPrice(Money.multiply(openItem.getUnitPrice(), paidQuantity));
+            paidItem.setDeductedVolumeMl(unitDeductedVolume.multiply(BigDecimal.valueOf(paidQuantity)).setScale(4, RoundingMode.HALF_UP));
             itemRepository.save(paidItem);
 
             int remainingQuantity = openItem.getQuantity() - paidQuantity;
             if (remainingQuantity <= 0) {
                 itemRepository.delete(openItem);
             } else {
-                BigDecimal remainingQuantityDecimal = BigDecimal.valueOf(remainingQuantity);
                 openItem.setQuantity(remainingQuantity);
-                openItem.setTotalPrice(openItem.getUnitPrice().multiply(remainingQuantityDecimal));
-                openItem.setDeductedVolumeMl(unitDeductedVolume.multiply(remainingQuantityDecimal).setScale(2, RoundingMode.HALF_UP));
+                openItem.setTotalPrice(Money.multiply(openItem.getUnitPrice(), remainingQuantity));
+                openItem.setDeductedVolumeMl(unitDeductedVolume.multiply(BigDecimal.valueOf(remainingQuantity)).setScale(4, RoundingMode.HALF_UP));
                 itemRepository.save(openItem);
             }
         }
@@ -349,9 +382,10 @@ public class TableOrderService {
             openOrder.setPaid(true);
             openOrder.setClosedAt(now);
             persistedOpenOrder = orderRepository.saveAndFlush(openOrder);
-            releaseAfterPayment(persistedOpenOrder);
+            releaseAfterClose(persistedOpenOrder);
         }
 
+        recordOperation(idempotencyKey, "SPLIT_PAYMENT", persistedOpenOrder, fingerprint, savedPaidOrder);
         return new SplitTableOrderPaymentResponse(
                 toResponse(persistedOpenOrder),
                 toResponse(savedPaidOrder)
@@ -372,11 +406,36 @@ public class TableOrderService {
         return toResponse(order);
     }
 
-    private void releaseAfterPayment(TableOrder order) {
+    private Optional<BillingOperation> replay(String rawKey, String type, Long orderId, String fingerprint) {
+        String key = org.thomcgn.backend.common.application.IdempotencyKeys.optional(rawKey);
+        if (key == null) return Optional.empty();
+        return operationRepository.findByOperationKey(key).map(operation -> {
+            if (!operation.getOperationType().equals(type)
+                    || !operation.getOrder().getId().equals(orderId)
+                    || !operation.getRequestFingerprint().equals(fingerprint)) {
+                throw new ConflictException("Idempotency-Key was already used for a different command");
+            }
+            return operation;
+        });
+    }
+
+    private void recordOperation(String rawKey, String type, TableOrder order, String fingerprint, TableOrder result) {
+        String key = org.thomcgn.backend.common.application.IdempotencyKeys.optional(rawKey);
+        if (key == null) return;
+        BillingOperation operation = new BillingOperation();
+        operation.setOperationKey(key);
+        operation.setOperationType(type);
+        operation.setOrder(order);
+        operation.setRequestFingerprint(fingerprint);
+        operation.setResultOrder(result);
+        operationRepository.save(operation);
+    }
+
+    private void releaseAfterClose(TableOrder order) {
         var table = order.getTable();
-        table.setStatus(orderRepository.hasUnsettledOrders(table.getId()) ? TableStatus.OCCUPIED : TableStatus.FREE);
+        table.setStatus(orderRepository.hasOpenOrders(table.getId()) ? TableStatus.OCCUPIED : TableStatus.FREE);
         tableRepository.save(table);
-        events.publishEvent(new org.thomcgn.backend.billing.application.TableOrderPaid(
+        events.publishEvent(new org.thomcgn.backend.billing.application.TableVisitEnded(
                 order.getReservation() == null ? null : order.getReservation().getId()));
     }
 

@@ -103,23 +103,31 @@ class ConcurrentWritesCharacterizationTest extends PostgresIntegrationTest {
     }
 
     @Test
-    void knownGap_stockUpdateIsLostDespiteTwoCommittedMovements() throws Exception {
+    void concurrentStockAdjustmentsCannotLoseAnUpdateOrGoNegative() throws Exception {
         jdbc.update("""
                 insert into inventory_items(name,package_type,packages_in_stock,content_per_package,
                   content_unit,total_stock_amount,reorder_threshold,minimum_stock,recommended_reorder_amount,active)
                 values('Concurrent stock','BARREL',1,10,'LITER',10,0,0,0,true)
                 """);
         var barrier = new CyclicBarrier(2);
-        doAnswer(call -> {
-            Object result = mockingDetails(call.getMock()).getMockCreationSettings().getDefaultAnswer().answer(call);
+        var successes = new AtomicInteger();
+        var conflicts = new AtomicInteger();
+        race(() -> {
             barrier.await(10, TimeUnit.SECONDS);
-            return result;
-        }).when(inventoryRepository).findById(1L);
-        race(() -> inventory.adjust(1L, new InventoryAdjustmentRequest(new BigDecimal("6"), "Race test", false), "test"));
+            try {
+                inventory.adjust(1L, new InventoryAdjustmentRequest(new BigDecimal("6"), "Race test", false), "test");
+                successes.incrementAndGet();
+            } catch (org.thomcgn.backend.common.exception.ConflictException expected) {
+                conflicts.incrementAndGet();
+            }
+            return null;
+        });
+        assertThat(successes.get()).isEqualTo(1);
+        assertThat(conflicts.get()).isEqualTo(1);
         assertThat(jdbc.queryForObject("select total_stock_amount from inventory_items where id=1", BigDecimal.class))
                 .isEqualByComparingTo("4");
         assertThat(jdbc.queryForObject("select sum(amount) from inventory_movements", BigDecimal.class))
-                .isEqualByComparingTo("-12");
+                .isEqualByComparingTo("-6");
     }
 
     @Test

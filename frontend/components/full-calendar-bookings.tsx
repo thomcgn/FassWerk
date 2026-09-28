@@ -301,7 +301,7 @@ function ResCard({
               {isPending ? "Ablehnen" : "Stornieren"}
             </Button>
           </>}
-          {reservation.status === "CHECKED_IN" && <span className="text-sm">Tische bleiben bis zur Bezahlung belegt.</span>}
+          {reservation.status === "CHECKED_IN" && <span className="text-sm">Tische bleiben bis zur Bezahlung oder zum Archivieren des Deckels belegt.</span>}
         </div>
       ) : null}
     </div>

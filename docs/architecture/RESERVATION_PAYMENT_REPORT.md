@@ -1,5 +1,8 @@
 # Reservation Payment Follow-up
 
+Historical checkpoint: the later deckel correction allows unpaid archiving to
+release a table while preserving debt. See RESERVATION_RULES.md and BILLING_INVENTORY_RULES.md.
+
 ## Scope
 
 Explicit correction to Phase 7 requested by the user, not a full Phase 8 rollout.

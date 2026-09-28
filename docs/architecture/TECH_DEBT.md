@@ -225,3 +225,28 @@ turnover bookings and checked-in groups lacking linked bills require operator re
 A conservative one-unresolved-booking-per-business-date policy replaces guessed
 stay lengths. Global serialization now includes all bill mutations; scalability
 and independent inventory adjustment concurrency remain explicit limitations.
+
+
+## Archived Deckel Clarification
+
+Explicit unpaid archiving ends physical occupancy, not debt. TableVisitEnded
+replaces the payment-only event, and reservation COMPLETED denotes an ended visit.
+Only OPEN bills block new groups. Older OCCUPIED flags from the previous archive
+behavior need explicit reconciliation, not an automatic rewrite of financial data.
+
+## Fortschritt nach Phase 8 (2026-09-28)
+
+| ID | Status nach Phase 8 |
+| --- | --- |
+| TD-004 | Behoben: Drink-/Varianten-Loeschung ist Soft-Delete; bezahlte Positionen und Umsatz bleiben erhalten. |
+| TD-008 | Billing/Reservation und manuelle Bestandsmutationen sind serialisiert; offene Bons besitzen DB-Unique-Gate, Add/Split/Korrektur Idempotenz. Globaler Lock bleibt Skalierungsrisiko. |
+| TD-014 | Behoben fuer den aktiven Geschaeftstag: echte Mehrfachmenge und Volumen werden gebucht, Einzelstorno gegengebucht. Cross-Day-Zuordnung braucht kuenftig ein unveraenderliches Sales-Ledger. |
+| TD-015 | Behoben: Wochenwerte werden aus der gesamten Woche neu berechnet; Scheduler-Wiederholung verdoppelt nichts. |
+| TD-016 | Behoben: Tages-ml werden in Wochenverbrauch der Artikel-Lagereinheit umgerechnet; Lead Time, Safety Stock, Mindestbestand und Reichweite verwenden dieselbe Einheit. |
+| TD-017 | Behoben im Bon-/Bestandspfad: Tracking-/Reorderfehler werden nicht verschluckt; ein Integrationstest beweist vollstaendigen Rollback. Scheduler verarbeitet Artikel weiterhin isoliert und protokolliert Einzelfehler. |
+| TD-023 | Phase-8-Matrix mit Rundung, Split, Retry, Nullbestand, Unterbestand, Rollback, Concurrency, Migration und Historienerhalt ergaenzt. |
+| TD-031 | Teilweise behoben: Paketbestand wird bei Abbuchung, Rueckbuchung und Korrektur synchronisiert. Wareneingangsbuchung bleibt separat offen. |
+
+Details: [BILLING_INVENTORY_RULES.md](BILLING_INVENTORY_RULES.md),
+[PHASE_8_REPORT.md](PHASE_8_REPORT.md). TD-020, Cross-Day-Sales-Attribution,
+Legacy-NULL-Aggregate, globale Lock-Skalierung und Wareneingangssemantik bleiben offen.

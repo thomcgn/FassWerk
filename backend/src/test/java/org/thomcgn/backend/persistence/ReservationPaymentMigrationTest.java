@@ -23,7 +23,7 @@ class ReservationPaymentMigrationTest extends MigratedPostgresTest {
                 rows.next(); reservation=rows.getLong(1);
             }
         }
-        assertThat(migration("latest").migrate().migrationsExecuted).isEqualTo(1);
+        assertThat(migration("latest").migrate().migrationsExecuted).isEqualTo(2);
         try(var connection=databaseConnection(); var sql=connection.createStatement()) {
             try(var rows=sql.executeQuery("select duration_minutes,ends_at is not null from reservations where id="+reservation)) {
                 rows.next();

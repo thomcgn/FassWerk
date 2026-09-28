@@ -236,14 +236,13 @@ class ReservationLifecycleIntegrationTest extends PostgresIntegrationTest {
                 .isEqualByComparingTo("99.50");
     }
 
-    @Test void unpaidArchiveAndElapsedTimeNeverReleaseAnOccupiedTable() {
+    @Test void elapsedTimeDoesNotReleaseButArchivingDoes() {
         var r=service.createReservation(request("18:00",6));
         service.confirm(r.getId());
         when(clock.instant()).thenReturn(r.getStartsAt());
         service.checkIn(r.getId());
         long table=r.getAssignedTables().getFirst().getId();
         var order=orders.getOpenByTable(table);
-        orders.markUnpaid(order.id());
         when(clock.instant()).thenReturn(r.getStartsAt().plusSeconds(24*3600));
         service.markNoShows();
         assertThat(tableStatus(table)).isEqualTo("OCCUPIED");
@@ -252,7 +251,12 @@ class ReservationLifecycleIntegrationTest extends PostgresIntegrationTest {
         assertThatThrownBy(() -> tables.update(table,new TableRequest("A","ROOM",TableStatus.FREE,true,4))).isInstanceOf(ConflictException.class);
         assertThatThrownBy(() -> service.createReservation(new CreateReservationRequest("Blocked",null,null,date.plusDays(2),LocalTime.of(18,0),1)))
                 .isInstanceOf(ConflictException.class);
+        orders.markUnpaid(order.id());
+        assertThat(tableStatus(table)).isEqualTo("FREE");
+        assertThat(orders.getById(order.id()).paid()).isFalse();
+        assertThat(service.getById(r.getId()).getStatus()).isEqualTo(ReservationStatus.CHECKED_IN);
         orders.reopenUnpaid(order.id());
+        assertThat(tableStatus(table)).isEqualTo("OCCUPIED");
         orders.close(order.id());
         assertThat(tableStatus(table)).isEqualTo("FREE");
     }
@@ -327,6 +331,65 @@ class ReservationLifecycleIntegrationTest extends PostgresIntegrationTest {
             assertThat(two.get(20,TimeUnit.SECONDS)).isEqualTo(ReservationStatus.CHECKED_IN);
             assertThat(jdbc.queryForObject("select count(*) from table_orders where reservation_id=?",Integer.class,r.getId())).isEqualTo(2);
         } finally { executor.shutdownNow(); }
+    }
+
+    @Test void archivedDebtDoesNotBlockNewGroupOrBecomePaidWhenNewGroupPays() {
+        var r=service.createReservation(request("18:00",2));
+        service.confirm(r.getId());
+        when(clock.instant()).thenReturn(r.getStartsAt());
+        service.checkIn(r.getId());
+        long table=r.getAssignedTables().getFirst().getId();
+        var bill=orders.addItem(orders.getOpenByTable(table).id(),
+                new org.thomcgn.backend.billing.api.dto.AddTableOrderItemRequest(stockedVariant(),2));
+        var archived=orders.markUnpaid(bill.id());
+        assertThat(archived.paid()).isFalse();
+        assertThat(archived.total()).isEqualByComparingTo("6");
+        assertThat(tableStatus(table)).isEqualTo("FREE");
+        assertThat(service.getById(r.getId()).getStatus()).isEqualTo(ReservationStatus.COMPLETED);
+        var next=service.createReservation(request("18:00",2));
+        assertThat(next.getAssignedTables().getFirst().getId()).isEqualTo(table);
+        service.confirm(next.getId());
+        // Even before check-in, the old deckel must not displace the new reservation.
+        assertThatThrownBy(() -> orders.reopenUnpaid(bill.id())).isInstanceOf(ConflictException.class);
+        service.checkIn(next.getId());
+        long newBill=orders.getOpenByTable(table).id();
+        assertThat(newBill).isNotEqualTo(bill.id());
+        assertThatThrownBy(() -> orders.reopenUnpaid(bill.id())).isInstanceOf(ConflictException.class);
+        orders.close(newBill);
+        assertThat(tableStatus(table)).isEqualTo("FREE");
+        assertThat(orders.getById(bill.id()).paid()).isFalse();
+        assertThat(orders.getById(bill.id()).total()).isEqualByComparingTo("6");
+        assertThat(orders.searchArchive(null,null,"UNPAID")).extracting(o -> o.id()).contains(bill.id());
+    }
+
+    @Test void archivingRollbackRetainsBillAndGroupOccupancy() {
+        var r=service.createReservation(request("18:00",2));
+        service.confirm(r.getId());
+        when(clock.instant()).thenReturn(r.getStartsAt());
+        service.checkIn(r.getId());
+        long table=r.getAssignedTables().getFirst().getId();
+        long bill=orders.getOpenByTable(table).id();
+        new TransactionTemplate(transactions).execute(status -> {
+            orders.markUnpaid(bill);
+            assertThat(service.getById(r.getId()).getStatus()).isEqualTo(ReservationStatus.COMPLETED);
+            status.setRollbackOnly();
+            return null;
+        });
+        assertThat(tableStatus(table)).isEqualTo("OCCUPIED");
+        assertThat(orders.getOpenByTable(table).id()).isEqualTo(bill);
+        assertThat(service.getById(r.getId()).getStatus()).isEqualTo(ReservationStatus.CHECKED_IN);
+    }
+
+    @Test void walkInCanStartANewBillWhilePreviousDeckelRemainsInArchive() {
+        var first=orders.open(new org.thomcgn.backend.billing.api.dto.OpenTableOrderRequest(1L,null));
+        orders.markUnpaid(first.id());
+        var next=orders.open(new org.thomcgn.backend.billing.api.dto.OpenTableOrderRequest(1L,null));
+        assertThat(next.id()).isNotEqualTo(first.id());
+        assertThat(tableStatus(1L)).isEqualTo("OCCUPIED");
+        assertThatThrownBy(() -> orders.reopenUnpaid(first.id())).isInstanceOf(ConflictException.class);
+        orders.close(next.id());
+        assertThat(tableStatus(1L)).isEqualTo("FREE");
+        assertThat(orders.getById(first.id()).paid()).isFalse();
     }
 
     private String tableStatus(long table) {

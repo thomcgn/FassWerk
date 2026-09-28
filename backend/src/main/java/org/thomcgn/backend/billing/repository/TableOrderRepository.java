@@ -14,11 +14,11 @@ public interface TableOrderRepository extends JpaRepository<TableOrder, Long> {
 
     List<TableOrder> findAllByReservationId(Long reservationId);
 
-    @Query("select distinct o.table.id from TableOrder o where o.status = org.thomcgn.backend.billing.domain.TableOrderStatus.OPEN or o.paid = false")
+    @Query("select distinct o.table.id from TableOrder o where o.status = org.thomcgn.backend.billing.domain.TableOrderStatus.OPEN")
     List<Long> findOccupiedTableIds();
 
-    @Query("select count(o) > 0 from TableOrder o where o.table.id = :tableId and (o.status = org.thomcgn.backend.billing.domain.TableOrderStatus.OPEN or o.paid = false)")
-    boolean hasUnsettledOrders(@Param("tableId") Long tableId);
+    @Query("select count(o) > 0 from TableOrder o where o.table.id = :tableId and (o.status = org.thomcgn.backend.billing.domain.TableOrderStatus.OPEN)")
+    boolean hasOpenOrders(@Param("tableId") Long tableId);
 
     Optional<TableOrder> findFirstByTableIdAndStatus(Long tableId, TableOrderStatus status);
 

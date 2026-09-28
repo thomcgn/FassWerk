@@ -110,7 +110,6 @@ public class MenuService {
         Map<Long, InventoryItem> inventoryItemsToUnlink = new LinkedHashMap<>();
 
         for (Long variantId : variantIds) {
-            tableOrderItemRepository.deleteByDrinkVariantId(variantId);
             inventoryItemRepository.findAllByLinkedDrinkVariantId(variantId)
                     .forEach(item -> inventoryItemsToUnlink.put(item.getId(), item));
         }
@@ -129,10 +128,12 @@ public class MenuService {
         }
 
         for (DrinkVariant variant : variants) {
-            variantRepository.delete(variant);
+            variant.setActive(false);
+            variantRepository.save(variant);
         }
 
-        drinkRepository.delete(drink);
+        drink.setActive(false);
+        drinkRepository.save(drink);
     }
 
     @Transactional(readOnly = true)
@@ -208,15 +209,14 @@ public class MenuService {
         DrinkVariant variant = variantRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Drink variant not found: " + id));
 
-        tableOrderItemRepository.deleteByDrinkVariantId(id);
-
         inventoryItemRepository.findAllByLinkedDrinkVariantId(id)
                 .forEach(item -> {
                     item.setLinkedDrinkVariant(null);
                     inventoryItemRepository.save(item);
                 });
 
-        variantRepository.delete(variant);
+        variant.setActive(false);
+        variantRepository.save(variant);
     }
 
     private void applyCategory(DrinkCategory category, DrinkCategoryRequest request) {

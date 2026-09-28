@@ -28,7 +28,7 @@ public class InventoryMovement extends BaseEntity {
     @Column(nullable = false)
     private InventoryMovementType movementType;
 
-    @Column(nullable = false, precision = 14, scale = 2)
+    @Column(nullable = false, precision = 14, scale = 4)
     private BigDecimal amount;
 
     @Enumerated(EnumType.STRING)
@@ -47,5 +47,8 @@ public class InventoryMovement extends BaseEntity {
 
     @Column
     private String createdBy;
+
+    @Column(length = 80)
+    private String operationKey;
 }
 

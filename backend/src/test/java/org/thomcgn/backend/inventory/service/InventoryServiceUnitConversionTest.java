@@ -50,6 +50,12 @@ class InventoryServiceUnitConversionTest {
     @Mock
     private InventoryDefaultsProperties inventoryDefaultsProperties;
 
+    @Mock
+    private DrinkSalesTrackingService drinkSalesTrackingService;
+
+    @Mock
+    private ReorderCalculationService reorderCalculationService;
+
     @InjectMocks
     private InventoryService inventoryService;
 
@@ -58,7 +64,7 @@ class InventoryServiceUnitConversionTest {
         DrinkVariant variant = createVariant(2L);
         InventoryItem item = createInventoryItem(ContentUnit.LITER, "50.00");
 
-        when(inventoryItemRepository.findFirstByLinkedDrinkVariantIdAndActiveTrue(variant.getId()))
+        when(inventoryItemRepository.findActiveByVariantIdForUpdate(variant.getId()))
                 .thenReturn(Optional.of(item));
         when(inventoryItemRepository.save(any(InventoryItem.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -73,7 +79,7 @@ class InventoryServiceUnitConversionTest {
         DrinkVariant variant = createVariant(2L);
         InventoryItem item = createInventoryItem(ContentUnit.MILLILITER, "50000.00");
 
-        when(inventoryItemRepository.findFirstByLinkedDrinkVariantIdAndActiveTrue(variant.getId()))
+        when(inventoryItemRepository.findActiveByVariantIdForUpdate(variant.getId()))
                 .thenReturn(Optional.of(item));
         when(inventoryItemRepository.save(any(InventoryItem.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -88,7 +94,7 @@ class InventoryServiceUnitConversionTest {
         DrinkVariant variant = createVariant(2L);
         InventoryItem item = createInventoryItem(ContentUnit.PIECE, "100.00");
 
-        when(inventoryItemRepository.findFirstByLinkedDrinkVariantIdAndActiveTrue(variant.getId()))
+        when(inventoryItemRepository.findActiveByVariantIdForUpdate(variant.getId()))
                 .thenReturn(Optional.of(item));
 
         ConflictException exception = assertThrows(
@@ -106,9 +112,9 @@ class InventoryServiceUnitConversionTest {
         DrinkVariant variant = createVariant(7L);
         InventoryItem item = createInventoryItem(ContentUnit.LITER, "20.00");
 
-        when(inventoryItemRepository.findFirstByLinkedDrinkVariantIdAndActiveTrue(variant.getId()))
+        when(inventoryItemRepository.findActiveByVariantIdForUpdate(variant.getId()))
                 .thenReturn(Optional.empty());
-        when(inventoryItemRepository.findAllByLinkedDrinkIdAndActiveTrue(11L))
+        when(inventoryItemRepository.findActiveByDrinkIdForUpdate(11L))
                 .thenReturn(List.of(item));
         when(inventoryItemRepository.save(any(InventoryItem.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -185,7 +191,7 @@ class InventoryServiceUnitConversionTest {
         item.setLinkedDrink(variant.getDrink());
         item.setLinkedDrinkVariant(variant);
 
-        when(inventoryItemRepository.findById(77L)).thenReturn(Optional.of(item));
+        when(inventoryItemRepository.findByIdForUpdate(77L)).thenReturn(Optional.of(item));
 
         inventoryService.deleteItem(77L);
 
@@ -193,7 +199,7 @@ class InventoryServiceUnitConversionTest {
         assertNull(item.getLinkedDrink());
         assertNull(item.getLinkedDrinkVariant());
         assertEquals(new BigDecimal("10.00"), item.getTotalStockAmount());
-        verify(inventoryItemRepository).findById(77L);
+        verify(inventoryItemRepository).findByIdForUpdate(77L);
         verify(inventoryItemRepository).save(item);
         verifyNoMoreInteractions(inventoryItemRepository);
         verifyNoInteractions(movementRepository);

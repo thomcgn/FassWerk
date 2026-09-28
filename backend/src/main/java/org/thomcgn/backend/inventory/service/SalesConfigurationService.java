@@ -29,7 +29,7 @@ public class SalesConfigurationService {
     private Integer defaultWeeksLookback;
 
     @Value("${app.sales.calculation.default-safety-factor:1.5}")
-    private Double defaultSafetyFactor;
+    private BigDecimal defaultSafetyFactor;
 
     @Value("${app.sales.calculation.default-lead-time-days:3}")
     private Integer defaultLeadTimeDays;
@@ -47,7 +47,7 @@ public class SalesConfigurationService {
         InventoryBusinessSettings settings = getOrCreateSettings();
         return new SalesConfigurationDto(
                 defaultWeeksLookback,
-                BigDecimal.valueOf(defaultSafetyFactor),
+                defaultSafetyFactor,
                 defaultLeadTimeDays,
                 settings.getBusinessTimezone(),
                 settings.getBusinessDayEndsAt(),

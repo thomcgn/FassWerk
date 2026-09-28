@@ -8,7 +8,7 @@ export async function POST(request: Request, { params }: Params) {
   const body = await request.json();
   const response = await backendFetchWithAuth(`/api/table-orders/${id}/items`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "Idempotency-Key": request.headers.get("Idempotency-Key") ?? "" },
     body: JSON.stringify(body),
   });
 

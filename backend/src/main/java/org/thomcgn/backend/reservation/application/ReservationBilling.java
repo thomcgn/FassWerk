@@ -7,5 +7,5 @@ import java.util.Set;
 public interface ReservationBilling {
     void openForCheckIn(Long reservationId, List<Long> tableIds);
     Set<Long> occupiedTableIds();
-    Set<Long> settledTableIds(Long reservationId);
+    Set<Long> releasedTableIds(Long reservationId);
 }

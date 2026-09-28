@@ -1,6 +1,7 @@
 # Reservation Rules
 
-Updated after Phase 7 by the user's explicit payment-bound occupancy requirement.
+Updated after Phase 7: check-in opens table bills; payment OR explicitly archiving
+an unpaid deckel ends table occupancy. Debt and physical occupancy are separate.
 The original 180-minute stay model is superseded.
 
 ## Arrival and Capacity
@@ -10,10 +11,10 @@ The original 180-minute stay model is superseded.
   guessed; configure actual capacity first.
 - There is no planned maximum stay and no automatic release after 180 minutes.
 - Conservative planning: one unresolved reservation per table and business date.
-  No second turnover on that business date is promised before payment/cancellation/
+  No second turnover on that business date is promised before payment/archiving/cancellation/
   no-show. Different future business dates can be reserved, but currently occupied
   tables are excluded from new allocations regardless of date.
-- CHECKED_IN table holds are per-table and end only after that table is paid.
+- CHECKED_IN table holds are per-table and end when its bill is paid or explicitly archived.
 - Arrival, not a fictitious whole stay, must fit an opening window. Closed breaks
   reject arrivals; FIXED slots remain relative to opening time.
 - Overnight arrivals belong to the opening day's business date. Ambiguous/nonexistent
@@ -35,41 +36,45 @@ validation share the same instant-based deadline, including DST transitions.
 ## Check-in and Billing
 
 Check-in is atomic:
-1. Revalidate all assigned tables against physical status and all open/unpaid bills.
+1. Revalidate all assigned tables against physical status and all OPEN bills.
 2. Open one OPEN, unpaid table bill per assigned table, linked to the reservation.
 3. Mark all tables OCCUPIED and the reservation CHECKED_IN.
 
 Any conflict rolls the entire operation back. Repeated/concurrent check-ins do not
-duplicate bills or reopen already paid tables. Drinks use the existing inventory-
+duplicate bills or reopen already paid/archived tables. Drinks use the existing inventory-
 validated order-item endpoints; no separate reservation-only billing model exists.
 
-Partial payment keeps the parent bill open and the table occupied.
-A full close/payment, or split payment consuming every remaining item, closes the
-parent bill as paid. The table becomes FREE only if no other open/unpaid bill exists.
-Unpaid archiving is not payment: the table remains occupied. Reopen the archived
-bill and settle it; opening a replacement bill is rejected.
+Partial payment on an OPEN bill keeps the table occupied. Full payment or a
+split payment consuming the remaining items closes the bill with paid=true.
+Explicit unpaid archiving (leaving a deckel) closes it with paid=false, preserves
+the entire remaining debt/items and frees the table. Only OPEN bills hold tables.
 
-After every assigned table is settled, the reservation automatically becomes
-COMPLETED in the same payment transaction. A paid table is reusable even while
-other tables in the group remain unpaid. The manual completion UI is removed;
-the compatibility endpoint refuses unpaid or missing table bills.
+After every assigned table bill is CLOSED, the reservation becomes COMPLETED in
+the same transaction. This means the visit has ended, not that all debts are paid.
+Individual paid/archived tables are reusable while other group tables remain OPEN.
+The manual completion endpoint still refuses OPEN or missing bills.
+
+Selecting a free table starts a separate new bill rather than reloading an old debt.
+Archived debts remain explicitly accessible in the archive. Paying a new group's
+bill does not pay, merge or delete an earlier deckel. Reopening an old deckel
+requires an active table without a current OPEN bill or a conflicting reservation
+hold; it occupies that table again. It cannot displace a new group.
 
 Walk-in opening respects reservation holds for the current business date.
-Passing reservationId to manual bill opening is rejected: use check-in so the
-whole group is handled together. Capacity/availability/status edits cannot release
-held or unpaid tables. The table UI shows free tables for reuse and exposes archived
-unpaid bills rather than silently creating replacement bills.
+Passing reservationId to manual bill opening is rejected: use group check-in.
+Capacity/availability/status edits cannot release tables held by an OPEN bill.
 
 ## Transactions
 
 BookingMutationLock (PostgreSQL transaction advisory lock 7100701) covers reservation,
 capacity and all table-bill mutations. Check-in, add/remove, split/close/reopen and
 table release cannot race each other. V24 adds a unique partial index allowing only
-one OPEN bill per table. Synchronous TableOrderPaid events update the reservation
-inside the payment transaction; rollback restores payment, occupancy and lifecycle.
+one OPEN bill per table. Synchronous TableVisitEnded events update the reservation
+inside the payment/archiving transaction; rollback restores bill, occupancy and lifecycle.
 
-This is a coarse single-venue lock, not a throughput optimization. Independent
-inventory adjustments still have their pre-existing concurrency debt (Phase 8).
+This is a coarse single-venue lock, not a throughput optimization. Phase 8 now
+serializes independent inventory adjustments with row locks; global billing-lock
+scalability remains documented in `BILLING_INVENTORY_RULES.md`.
 
 ## Mail and QR
 
@@ -82,8 +87,8 @@ credentials. Old frontend API-path QR links redirect to the scan page.
 ## Upgrade and Operations
 
 V24 is schema-only: it permits NULL planned end and adds billing indexes. It does
-not bulk-rewrite, delete or mark paid any historical reservation/bill. Existing
-unpaid bills block allocation even when a legacy stored table status says FREE.
+not bulk-rewrite, delete or mark paid any historical reservation/bill. OPEN bills block allocation even when a legacy stored table status says FREE.
+CLOSED unpaid bills do not block allocation.
 
 Before deploying, check for pre-existing duplicate OPEN bills:
 
@@ -106,8 +111,17 @@ Conflicting legacy bills require explicit reconciliation, never silent adoption.
 
 Existing future bookings made under the former turnover assumption may already
 share a table on one business date. Review/reassign them before rollout; check-in
-will never displace a current unpaid group. The new code prevents creating more
+will never displace a currently seated group. The new code prevents creating more
 such turnover promises but deliberately does not rewrite existing bookings.
 
 Physical adjacency, automatic replacement-table selection, public self-cancellation
 and durable mail retries remain out of scope.
+
+
+### Previously Archived Deckels
+
+This correction requires no new schema migration and does not bulk-rewrite
+historical data. A table stored as OCCUPIED by the previous archive behavior
+requires explicit reconciliation: after confirming no current group/OPEN bill
+uses it, staff can reopen and archive that deckel again. This applies the new
+release transaction while retaining the debt and completing its old visit.

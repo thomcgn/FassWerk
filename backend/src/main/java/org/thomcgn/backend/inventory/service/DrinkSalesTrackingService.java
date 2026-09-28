@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.thomcgn.backend.common.exception.ConflictException;
 import org.thomcgn.backend.inventory.domain.DrinkSalesDaily;
 import org.thomcgn.backend.inventory.domain.DrinkSalesWeekly;
 import org.thomcgn.backend.inventory.repository.DrinkSalesDailyRepository;
@@ -34,33 +35,53 @@ public class DrinkSalesTrackingService {
      */
     @Transactional
     public void recordSale(DrinkVariant drinkVariant, BigDecimal quantity, BigDecimal volumeMl) {
-        if (quantity.compareTo(BigDecimal.ZERO) <= 0) {
-            log.debug("Ignoring sale with zero or negative quantity for variant: {}", drinkVariant.getId());
-            return;
+        if (quantity.signum() <= 0 || volumeMl.signum() <= 0) {
+            throw new ConflictException("Sale quantity and volume must be positive");
         }
+        adjustDailySale(drinkVariant, quantity, volumeMl, false);
+    }
 
+    @Transactional
+    public void reverseSale(DrinkVariant drinkVariant, BigDecimal quantity, BigDecimal volumeMl) {
+        if (quantity.signum() <= 0 || volumeMl.signum() <= 0) {
+            throw new ConflictException("Sale reversal quantity and volume must be positive");
+        }
+        adjustDailySale(drinkVariant, quantity.negate(), volumeMl.negate(), true);
+    }
+
+    private void adjustDailySale(
+            DrinkVariant drinkVariant,
+            BigDecimal quantityDelta,
+            BigDecimal volumeDeltaMl,
+            boolean existingRequired
+    ) {
         LocalDate today = salesConfigurationService.getCurrentBusinessDate();
         Drink drink = drinkVariant.getDrink();
-
         Optional<DrinkSalesDaily> existingDaily = drinkSalesDailyRepository
                 .findByDrinkIdAndDrinkVariantIdAndSaleDate(drink.getId(), drinkVariant.getId(), today);
 
-        DrinkSalesDaily dailySale;
-        if (existingDaily.isPresent()) {
-            dailySale = existingDaily.get();
-            dailySale.setQuantitySold(dailySale.getQuantitySold().add(quantity));
-            dailySale.setVolumeSoldMl(dailySale.getVolumeSoldMl().add(volumeMl));
-        } else {
-            dailySale = new DrinkSalesDaily();
-            dailySale.setDrink(drink);
-            dailySale.setDrinkVariant(drinkVariant);
-            dailySale.setSaleDate(today);
-            dailySale.setQuantitySold(quantity);
-            dailySale.setVolumeSoldMl(volumeMl);
+        if (existingRequired && existingDaily.isEmpty()) {
+            throw new ConflictException("No daily sale exists for cancellation");
         }
 
+        DrinkSalesDaily dailySale = existingDaily.orElseGet(() -> {
+            DrinkSalesDaily created = new DrinkSalesDaily();
+            created.setDrink(drink);
+            created.setDrinkVariant(drinkVariant);
+            created.setSaleDate(today);
+            created.setQuantitySold(BigDecimal.ZERO);
+            created.setVolumeSoldMl(BigDecimal.ZERO);
+            return created;
+        });
+        BigDecimal quantity = dailySale.getQuantitySold().add(quantityDelta);
+        BigDecimal volume = dailySale.getVolumeSoldMl().add(volumeDeltaMl);
+        if (quantity.signum() < 0 || volume.signum() < 0) {
+            throw new ConflictException("Sale reversal exceeds recorded daily sale");
+        }
+        dailySale.setQuantitySold(quantity);
+        dailySale.setVolumeSoldMl(volume);
         drinkSalesDailyRepository.save(dailySale);
-        log.debug("Recorded sale for variant {} on {}: {} qty, {} ml", drinkVariant.getId(), today, quantity, volumeMl);
+        log.debug("Adjusted sale for variant {} on {}: {} qty, {} ml", drinkVariant.getId(), today, quantityDelta, volumeDeltaMl);
     }
 
     /**
@@ -93,22 +114,22 @@ public class DrinkSalesTrackingService {
 
         Optional<DrinkSalesWeekly> existingWeekly = drinkSalesWeeklyRepository
                 .findByDrinkIdAndDrinkVariantIdAndWeekStartDate(drink.getId(), variant.getId(), weekStart);
+        List<DrinkSalesDaily> weekSales = drinkSalesDailyRepository
+                .findByDrinkVariantIdAndSaleDateBetween(variant.getId(), weekStart, weekStart.plusDays(6));
 
-        DrinkSalesWeekly weekly;
-        if (existingWeekly.isPresent()) {
-            weekly = existingWeekly.get();
-            weekly.setQuantitySold(weekly.getQuantitySold().add(daily.getQuantitySold()));
-            weekly.setVolumeSoldMl(weekly.getVolumeSoldMl().add(daily.getVolumeSoldMl()));
-        } else {
-            weekly = new DrinkSalesWeekly();
-            weekly.setDrink(drink);
-            weekly.setDrinkVariant(variant);
-            weekly.setWeekStartDate(weekStart);
-            weekly.setQuantitySold(daily.getQuantitySold());
-            weekly.setVolumeSoldMl(daily.getVolumeSoldMl());
-        }
+        DrinkSalesWeekly weekly = existingWeekly.orElseGet(() -> {
+            DrinkSalesWeekly created = new DrinkSalesWeekly();
+            created.setDrink(drink);
+            created.setDrinkVariant(variant);
+            created.setWeekStartDate(weekStart);
+            return created;
+        });
+        weekly.setQuantitySold(weekSales.stream()
+                .map(DrinkSalesDaily::getQuantitySold).reduce(BigDecimal.ZERO, BigDecimal::add));
+        weekly.setVolumeSoldMl(weekSales.stream()
+                .map(DrinkSalesDaily::getVolumeSoldMl).reduce(BigDecimal.ZERO, BigDecimal::add));
 
-        // Calculate averages (7 days per week)
+        // Recompute the whole week, so scheduler retries cannot double-count a day.
         BigDecimal sevenDays = BigDecimal.valueOf(7);
         weekly.setAverageDailyQuantity(weekly.getQuantitySold().divide(sevenDays, 4, java.math.RoundingMode.HALF_UP));
         weekly.setAverageDailyVolumeMl(weekly.getVolumeSoldMl().divide(sevenDays, 4, java.math.RoundingMode.HALF_UP));
@@ -127,8 +148,8 @@ public class DrinkSalesTrackingService {
     public BigDecimal calculateAverageDailyConsumption(Long variantId, Integer weeksLookback) {
         LocalDate lookbackDate = salesConfigurationService.getCurrentBusinessDate().minusWeeks(weeksLookback);
 
-        Double average = drinkSalesWeeklyRepository.findAverageDailyVolumeByVariantSince(variantId, lookbackDate);
-        return average != null ? BigDecimal.valueOf(average) : BigDecimal.ZERO;
+        BigDecimal average = drinkSalesWeeklyRepository.findAverageDailyVolumeByVariantSince(variantId, lookbackDate);
+        return average != null ? average : BigDecimal.ZERO;
     }
 
     /**

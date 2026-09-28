@@ -52,27 +52,18 @@ public class ReorderCalculationService {
         BigDecimal safetyFactor = metadata.map(ConsumptionMetadata::getSafetyStockFactor).orElse(config.defaultSafetyFactor());
         Integer leadTimeDays = metadata.map(ConsumptionMetadata::getLeadTimeDays).orElse(config.defaultLeadTimeDays());
 
-        // Calculate weekly average consumption
-        BigDecimal weeklyAverageConsumption = drinkSalesTrackingService
+        BigDecimal averageDailyVolumeMl = drinkSalesTrackingService
                 .calculateAverageDailyConsumption(inventoryItem.getLinkedDrinkVariant().getId(), weeksLookback);
+        BigDecimal weeklyAverageConsumption = convertMlToInventoryUnit(
+                averageDailyVolumeMl.multiply(BigDecimal.valueOf(7)), inventoryItem);
 
-        // Calculate consumption during lead time
         BigDecimal leadTimeWeeks = BigDecimal.valueOf(leadTimeDays).divide(BigDecimal.valueOf(7), 4, RoundingMode.HALF_UP);
         BigDecimal leadTimeConsumption = weeklyAverageConsumption.multiply(leadTimeWeeks);
-
-        // Calculate safety stock
         BigDecimal safetyStock = weeklyAverageConsumption.multiply(safetyFactor);
-
-        // Calculate recommended reorder amount
-        // Formula: (Weekly Avg × Lead Time Weeks) + Safety Stock - Current Stock
-        // But ensure it reaches at least the minimum stock and respects reorder threshold
         BigDecimal currentStock = inventoryItem.getTotalStockAmount();
-        BigDecimal recommendedAmount = leadTimeConsumption.add(safetyStock).subtract(currentStock);
-
-        // Ensure we don't recommend negative amounts, but respect minimum stock
-        if (recommendedAmount.compareTo(BigDecimal.ZERO) < 0) {
-            recommendedAmount = BigDecimal.ZERO;
-        }
+        BigDecimal demandBasedAmount = leadTimeConsumption.add(safetyStock).subtract(currentStock);
+        BigDecimal minimumStockGap = inventoryItem.getMinimumStock().subtract(currentStock);
+        BigDecimal recommendedAmount = demandBasedAmount.max(minimumStockGap).max(BigDecimal.ZERO);
 
         // Check if below threshold
         boolean isBelowThreshold = currentStock.compareTo(inventoryItem.getReorderThreshold()) < 0;
@@ -103,6 +94,14 @@ public class ReorderCalculationService {
                 inventoryItem.getId(), weeklyAverageConsumption, recommendedAmount, isBelowThreshold);
 
         return saved;
+    }
+
+    private BigDecimal convertMlToInventoryUnit(BigDecimal volumeMl, InventoryItem inventoryItem) {
+        return switch (inventoryItem.getContentUnit()) {
+            case MILLILITER -> volumeMl;
+            case LITER -> volumeMl.movePointLeft(3);
+            case PIECE -> throw new IllegalStateException("Volume-based reorder calculation requires a volume inventory unit");
+        };
     }
 
     /**

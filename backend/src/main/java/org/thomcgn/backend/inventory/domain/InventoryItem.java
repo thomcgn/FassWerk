@@ -40,14 +40,14 @@ public class InventoryItem extends BaseEntity {
     @Column(nullable = false, precision = 12, scale = 2)
     private BigDecimal packagesInStock;
 
-    @Column(nullable = false, precision = 12, scale = 2)
+    @Column(nullable = false, precision = 14, scale = 4)
     private BigDecimal contentPerPackage;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private ContentUnit contentUnit;
 
-    @Column(nullable = false, precision = 14, scale = 2)
+    @Column(nullable = false, precision = 14, scale = 4)
     private BigDecimal totalStockAmount;
 
     @Column(nullable = false, precision = 14, scale = 2)

@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.thomcgn.backend.billing.api.dto.AddTableOrderItemRequest;
@@ -48,8 +49,9 @@ public class TableOrderController {
     @Operation(summary = "Position auf offenen Bon buchen")
     @SecurityRequirement(name = "bearerAuth")
     @ApiResponse(responseCode = "200", description = "Position gebucht")
-    public TableOrderResponse addItem(@PathVariable Long id, @Valid @RequestBody AddTableOrderItemRequest request) {
-        return tableOrderService.addItem(id, request);
+    public TableOrderResponse addItem(@PathVariable Long id, @Valid @RequestBody AddTableOrderItemRequest request,
+                                      @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey) {
+        return tableOrderService.addItem(id, request, idempotencyKey);
     }
 
     @DeleteMapping("/{id}/items/{itemId}")
@@ -96,9 +98,10 @@ public class TableOrderController {
     })
     public SplitTableOrderPaymentResponse splitPayment(
             @PathVariable Long id,
-            @Valid @RequestBody SplitTableOrderPaymentRequest request
+            @Valid @RequestBody SplitTableOrderPaymentRequest request,
+            @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey
     ) {
-        return tableOrderService.splitPayment(id, request);
+        return tableOrderService.splitPayment(id, request, idempotencyKey);
     }
 
     @GetMapping("/{id}")
