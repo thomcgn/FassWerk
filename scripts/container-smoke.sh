@@ -66,6 +66,20 @@ for service in backend frontend; do
 done
 
 docker exec "${frontend_id}" sh -c 'touch /app/.next/cache/writable-probe && rm /app/.next/cache/writable-probe'
+# Verify the native runtime paths after removing package managers/system zlib.
+docker exec "${frontend_id}" sh -c '! command -v npm && ! command -v apk'
+docker exec "${frontend_id}" node -e '
+  const zlib = require("node:zlib");
+  const input = Buffer.from("FassWerk runtime smoke");
+  if (!zlib.gunzipSync(zlib.gzipSync(input)).equals(input)) process.exit(1);
+  const sharp = require("sharp");
+  sharp({ create: { width: 2, height: 2, channels: 3, background: "#123456" } })
+    .avif().toBuffer()
+    .then(data => sharp(data).png().toBuffer())
+    .then(data => { if (!data.length) process.exit(1); })
+    .catch(error => { console.error(error); process.exit(1); });
+'
+
 backend_address="$(docker compose port backend 8080)"
 frontend_address="$(docker compose port frontend 3000)"
 curl --fail --silent --show-error --max-time 5 "http://${backend_address}/actuator/health" >/dev/null

@@ -4,10 +4,19 @@ on:
   push:
     branches: [ main ]
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   backend-openapi:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: backend
@@ -20,9 +29,26 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
 
       - name: Verify backend
         run: ./mvnw -B clean verify
+
+      - name: Generate coverage report even after test failures
+        if: ${{ !cancelled() }}
+        run: ./mvnw -B jacoco:report
+
+      - name: Upload backend tests and coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-reports
+          path: |
+            backend/target/surefire-reports/
+            backend/target/site/jacoco/
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Prepare OpenAPI database and credentials
         run: |
@@ -90,8 +116,50 @@ jobs:
           path: ${{ env.OPENAPI_FILE }}
           if-no-files-found: error
 
+      - name: Scan packaged Java dependencies
+        uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2 # v7
+        with:
+          path: backend/target/
+          fail-build: true
+          grype-version: v0.119.0
+          severity-cutoff: high
+          output-format: json
+          output-file: backend-vulnerabilities.json
+
+      - name: Upload backend vulnerability report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-vulnerabilities
+          path: backend-vulnerabilities.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  frontend-dependencies:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Audit all locked npm dependencies
+        run: npm audit --audit-level=high --json > npm-audit.json
+      - name: Upload npm vulnerability report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-audit
+          path: frontend/npm-audit.json
+          if-no-files-found: warn
+          retention-days: 14
+
   frontend-e2e-critical:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: frontend
@@ -125,6 +193,7 @@ jobs:
 
       - name: Run critical E2E flows
         env:
+          E2E_PRODUCTION: 'true'
           E2E_FIXED_DATE: '2026-03-20'
           E2E_FIXED_TIMESTAMP: '2026-03-20T18:00:00.000Z'
         run: npm run test:e2e:critical
@@ -134,11 +203,15 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: playwright-results
-          path: frontend/test-results
+          path: |
+            frontend/test-results/
+            frontend/playwright-report/
+          retention-days: 14
 
   container-images:
     needs: [backend-openapi, frontend-e2e-critical]
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       FASSWERK_IMAGE_TAG: sha-${{ github.sha }}
       FASSWERK_VCS_REF: ${{ github.sha }}
@@ -172,3 +245,45 @@ jobs:
 
       - name: Verify hardened runtime
         run: ./scripts/container-smoke.sh
+
+      - name: Scan backend image
+        uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2 # v7
+        with:
+          image: fasswerk/backend:${{ env.FASSWERK_IMAGE_TAG }}
+          fail-build: true
+          grype-version: v0.119.0
+          severity-cutoff: high
+          output-format: json
+          output-file: backend-image-vulnerabilities.json
+
+      - name: Scan frontend image
+        if: ${{ !cancelled() }}
+        uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2 # v7
+        with:
+          image: fasswerk/frontend:${{ env.FASSWERK_IMAGE_TAG }}
+          fail-build: true
+          grype-version: v0.119.0
+          severity-cutoff: high
+          output-format: json
+          output-file: frontend-image-vulnerabilities.json
+
+      - name: Upload container vulnerability reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: container-vulnerabilities
+          path: '*-image-vulnerabilities.json'
+          if-no-files-found: warn
+          retention-days: 14
+
+  release-gate:
+    if: always()
+    needs: [backend-openapi, frontend-dependencies, frontend-e2e-critical, container-images]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every quality and security gate
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          echo "$RESULTS" | jq -e 'all(.[]; .result == "success")'

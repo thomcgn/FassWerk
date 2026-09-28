@@ -1,6 +1,9 @@
 import type { Page } from "@playwright/test";
 
 export async function mockAuthenticatedSession(page: Page) {
+  if (process.env.E2E_FIXED_TIMESTAMP) {
+    await page.clock.setFixedTime(new Date(process.env.E2E_FIXED_TIMESTAMP));
+  }
   await page.context().addCookies([
     {
       name: "fw_access_token",

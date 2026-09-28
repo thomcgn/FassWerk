@@ -300,3 +300,10 @@ cd backend
 DOCKER_HOST="$(docker context inspect --format '{{.Endpoints.docker.Host}}')" \
 TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock ./mvnw -B verify
 ```
+
+## CI/CD gate (Phase 12)
+
+The complete gate policy, report locations, production-mode browser invocation,
+scanner thresholds and current release blockers are documented in
+[CI_RELEASE_GATES.md](architecture/CI_RELEASE_GATES.md). Configure `release-gate`
+as the required GitHub check; test success alone does not imply security approval.

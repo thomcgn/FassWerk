@@ -288,3 +288,30 @@ Details: [API_CONTRACT.md](API_CONTRACT.md) und
 
 Details: [PHASE_11_REPORT.md](PHASE_11_REPORT.md) und
 [Docker Deployment](../deployment-docker.md).
+
+## Fortschritt Phase 12 (2026-09-28)
+
+- TD-010: CI um gemeinsame Release-Freigabe, Dependency-/Container-Scans,
+  Maven-Cache, Test-/Coverage-Artefakte und Dependabot erweitert. GitHub-Ausfuehrung
+  und verpflichtender Branch-Protection-Check bleiben extern nachzuweisen.
+- TD-005: npm-Audit erneut bestaetigt: 19 betroffene Pakete (1 critical, 10 high,
+  5 moderate, 3 low). Das neue Gate blockiert diese Befunde; nicht behoben oder
+  unterdrueckt. Daher keine Release-Freigabe und kein Start von Phase 13.
+- E2E-Reproduzierbarkeit: kritische Suite gegen Production-Build mit eigenem
+  Server, fester Browserzeit/Zeitzone und zustandsbasierten Tab-Assertions gruen;
+  generierte Reports werden als Artefakte behandelt.
+
+Details: [PHASE_12_REPORT.md](PHASE_12_REPORT.md),
+[CI_RELEASE_GATES.md](CI_RELEASE_GATES.md).
+
+## Phase-12 Security Follow-up (2026-09-28)
+
+TD-005 / initial dependency blockers resolved: npm audit 0, packaged Java scan 0,
+no high/critical findings in either final runtime image. Spring Boot 4.0.8,
+Tomcat 11.0.25, Next.js/eslint-config-next 16.3.6 and compatible transitive fixes;
+frontend runtime package managers and their system-zlib dependency removed.
+201 backend tests, 18 critical E2E cases, frontend gates, unchanged OpenAPI and
+extended native-library/Compose smoke all pass. Local Phase-12 status now PASS.
+Medium/low OS advisories remain tracked; GitHub execution and branch protection
+remain external verification. See
+[SECURITY_DEPENDENCY_REMEDIATION.md](SECURITY_DEPENDENCY_REMEDIATION.md).

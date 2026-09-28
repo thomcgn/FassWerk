@@ -35,6 +35,13 @@ COPY --from=builder --chown=app:app /app/.next/standalone ./
 COPY --from=builder --chown=app:app /app/.next/static ./.next/static
 RUN mkdir -p /app/.next/cache && chown app:app /app/.next/cache
 
+# Standalone runtime needs Node and bundled native libraries, not package managers.
+# apk-tools/libapk are the only consumers of the vulnerable system zlib here.
+RUN apk del --no-network apk-tools libapk zlib \
+    && rm -rf /usr/local/lib/node_modules /opt/yarn-* \
+      /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/yarn \
+      /usr/local/bin/yarnpkg /usr/local/bin/corepack
+
 USER app
 EXPOSE 3000
 STOPSIGNAL SIGTERM

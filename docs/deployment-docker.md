@@ -27,7 +27,10 @@ Das Backend nutzt `prod` und wartet auf eine gesunde PostgreSQL-Instanz. Flyway
 migriert beim Start; das Frontend wartet auf den Backend-Healthcheck. Die App-Images
 laufen als Nicht-Root mit schreibgeschuetztem Root-Dateisystem, ohne Linux-Capabilities
 und mit `no-new-privileges`. `/tmp` und der Next.js-Cache sind begrenzte, fluechtige
-tmpfs-Mounts. Datenbankdaten liegen weiterhin im persistenten Volume.
+tmpfs-Mounts. Datenbankdaten liegen weiterhin im persistenten Volume. Das Frontend-Runtime-Image
+enthaelt keine Paketmanager (npm/Yarn/apk); Aenderungen erfolgen durch einen neuen
+Image-Build. Node-Kompression und native Bildkonvertierung werden im Smoke-Test
+geprueft.
 
 Backend-Health prueft `/actuator/health`, Frontend-Health den HTTP-Startseitenaufruf.
 SMTP geht nur bei aktiviertem Reservierungsversand (`RESERVATION_MAIL_ENABLED`)
