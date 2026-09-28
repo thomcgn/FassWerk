@@ -79,7 +79,7 @@ public class ShiftSettlementService {
                 BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP),
                 revenue,
                 BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP),
-                revenue,
+                billingRevenue.cashRevenue(date).setScale(2, RoundingMode.HALF_UP),
                 List.of(),
                 0L
         );
@@ -111,7 +111,7 @@ public class ShiftSettlementService {
         totalWages = totalWages.setScale(2, RoundingMode.HALF_UP);
         BigDecimal revenue = resolveDailyRevenue(settlement.getSettlementDate());
         BigDecimal expectedClosingCash = settlement.getOpeningCash()
-                .add(revenue)
+                .add(billingRevenue.cashRevenue(settlement.getSettlementDate()))
                 .subtract(totalWages)
                 .subtract(settlement.getOtherExpenses())
                 .setScale(2, RoundingMode.HALF_UP);

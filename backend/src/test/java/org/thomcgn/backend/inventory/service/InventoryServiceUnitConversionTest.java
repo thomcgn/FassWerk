@@ -36,6 +36,9 @@ import static org.mockito.Mockito.when;
 class InventoryServiceUnitConversionTest {
 
     @Mock
+    private org.thomcgn.backend.common.audit.AuditContext auditContext;
+
+    @Mock
     private InventoryItemRepository inventoryItemRepository;
 
     @Mock

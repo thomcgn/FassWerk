@@ -14,7 +14,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class PostgresSchemaIntegrationTest extends MigratedPostgresTest {
     @Test
     void emptyDatabaseReachesCompleteSchemaOnlyThroughFlyway() throws Exception {
-        assertThat(flyway.info().applied()).hasSize(23);
+        assertThat(flyway.info().applied()).hasSize(25);
         assertThat(flyway.info().pending()).isEmpty();
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
         assertThat(flyway.migrate().migrationsExecuted).isZero();
@@ -26,7 +26,7 @@ class PostgresSchemaIntegrationTest extends MigratedPostgresTest {
                 var tables = new ArrayList<String>();
                 while (rows.next()) tables.add(rows.getString(1));
                 assertThat(tables).containsExactlyInAnyOrder(
-                        "business_day_close_operations", "auth_rate_buckets", "billing_operations", "reservation_tables", "app_users", "refresh_tokens", "revoked_access_tokens", "tables", "reservations",
+                        "business_audit_events", "business_day_close_operations", "auth_rate_buckets", "billing_operations", "reservation_tables", "app_users", "refresh_tokens", "revoked_access_tokens", "tables", "reservations",
                         "opening_hours", "booking_slot_config", "drink_categories", "drinks", "drink_variants",
                         "volume_prices", "inventory_items", "inventory_movements", "table_orders", "table_order_items",
                         "shift_settlements", "shift_worker_entries", "inventory_business_settings", "drink_sales_daily",

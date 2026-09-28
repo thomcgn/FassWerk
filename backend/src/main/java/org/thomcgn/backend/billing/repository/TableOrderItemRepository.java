@@ -25,8 +25,17 @@ public interface TableOrderItemRepository extends JpaRepository<TableOrderItem, 
             java.time.LocalDate startDate, java.time.LocalDate endDate,
             java.time.LocalDateTime startTime, java.time.LocalDateTime endTime);
 
-    java.util.Optional<TableOrderItem> findFirstByTableOrderIdAndDrinkVariantIdAndSaleBusinessDate(
-            Long orderId, Long variantId, java.time.LocalDate saleBusinessDate);
+    @Query("""
+            select coalesce(sum(i.totalPrice), 0) from TableOrderItem i join i.tableOrder o
+            where o.status = org.thomcgn.backend.billing.domain.TableOrderStatus.CLOSED and o.paid = true
+              and (o.paymentMethod is null or o.paymentMethod = org.thomcgn.backend.billing.domain.PaymentMethod.CASH)
+              and (o.closedBusinessDate = :date
+                or (o.closedBusinessDate is null and o.closedAt >= :start and o.closedAt < :end))
+            """)
+    BigDecimal cashRevenue(java.time.LocalDate date, LocalDateTime start, LocalDateTime end);
+
+    java.util.Optional<TableOrderItem> findFirstByTableOrderIdAndDrinkVariantIdAndSaleBusinessDateAndUnitPrice(
+            Long orderId, Long variantId, java.time.LocalDate saleBusinessDate, BigDecimal unitPrice);
 
     List<TableOrderItem> findByTableOrderId(Long tableOrderId);
 

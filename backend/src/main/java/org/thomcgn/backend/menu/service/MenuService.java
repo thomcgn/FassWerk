@@ -3,9 +3,6 @@ package org.thomcgn.backend.menu.service;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.thomcgn.backend.billing.domain.TableOrderItem;
-import org.thomcgn.backend.billing.domain.TableOrderStatus;
-import org.thomcgn.backend.billing.repository.TableOrderItemRepository;
 import org.thomcgn.backend.common.exception.BadRequestException;
 import org.thomcgn.backend.common.exception.NotFoundException;
 import org.thomcgn.backend.inventory.domain.InventoryItem;
@@ -42,7 +39,7 @@ public class MenuService {
     private final DrinkVariantRepository variantRepository;
     private final VolumePriceRepository volumePriceRepository;
     private final InventoryItemRepository inventoryItemRepository;
-    private final TableOrderItemRepository tableOrderItemRepository;
+    private final org.thomcgn.backend.common.persistence.BookingMutationLock bookingLock;
 
     @Transactional(readOnly = true)
     public List<DrinkCategoryResponse> listCategories() {
@@ -102,6 +99,7 @@ public class MenuService {
 
     @Transactional
     public void deleteDrink(Long id) {
+        bookingLock.acquire();
         Drink drink = drinkRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Drink not found: " + id));
 
@@ -161,6 +159,7 @@ public class MenuService {
 
     @Transactional
     public VolumePriceResponse createOrUpdateVolumePrice(VolumePriceRequest request) {
+        bookingLock.acquire();
         VolumePrice volumePrice = volumePriceRepository.findByVolumeMl(request.volumeMl())
                 .orElseGet(VolumePrice::new);
         volumePrice.setVolumeMl(request.volumeMl());
@@ -172,6 +171,7 @@ public class MenuService {
 
     @Transactional
     public VolumePriceResponse updateVolumePrice(Integer volumeMl, VolumePriceUpdateRequest request) {
+        bookingLock.acquire();
         VolumePrice volumePrice = volumePriceRepository.findByVolumeMl(volumeMl)
                 .orElseThrow(() -> new NotFoundException("Volume price not found for volumeMl: " + volumeMl));
         volumePrice.setPrice(request.price());
@@ -182,6 +182,7 @@ public class MenuService {
 
     @Transactional
     public void deleteVolumePrice(Integer volumeMl) {
+        bookingLock.acquire();
         VolumePrice volumePrice = volumePriceRepository.findByVolumeMl(volumeMl)
                 .orElseThrow(() -> new NotFoundException("Volume price not found for volumeMl: " + volumeMl));
         volumePriceRepository.delete(volumePrice);
@@ -189,6 +190,7 @@ public class MenuService {
 
     @Transactional
     public DrinkVariantResponse createVariant(DrinkVariantRequest request) {
+        bookingLock.acquire();
         DrinkVariant variant = new DrinkVariant();
         applyVariant(variant, request);
         return toResponse(variantRepository.save(variant));
@@ -196,16 +198,17 @@ public class MenuService {
 
     @Transactional
     public DrinkVariantResponse updateVariant(Long id, DrinkVariantRequest request) {
+        bookingLock.acquire();
         DrinkVariant variant = variantRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Drink variant not found: " + id));
         applyVariant(variant, request);
         DrinkVariant saved = variantRepository.save(variant);
-        syncOpenOrderItemsForVariantPrice(saved.getId(), resolveVariantPrice(saved));
         return toResponse(saved);
     }
 
     @Transactional
     public void deleteVariant(Long id) {
+        bookingLock.acquire();
         DrinkVariant variant = variantRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Drink variant not found: " + id));
 
@@ -303,21 +306,8 @@ public class MenuService {
     private void syncVariantPrices(Integer volumeMl, BigDecimal price) {
         variantRepository.findAllByVolumeMlAndUseVolumeStandardPriceTrue(volumeMl).forEach(variant -> {
             variant.setPrice(price);
-            DrinkVariant saved = variantRepository.save(variant);
-            syncOpenOrderItemsForVariantPrice(saved.getId(), price);
+            variantRepository.save(variant);
         });
-    }
-
-    private void syncOpenOrderItemsForVariantPrice(Long variantId, BigDecimal unitPrice) {
-        List<TableOrderItem> openItems = tableOrderItemRepository.findAllByDrinkVariantIdAndTableOrderStatus(
-                variantId,
-                TableOrderStatus.OPEN
-        );
-        for (TableOrderItem openItem : openItems) {
-            openItem.setUnitPrice(unitPrice);
-            openItem.setTotalPrice(unitPrice.multiply(BigDecimal.valueOf(openItem.getQuantity())));
-            tableOrderItemRepository.save(openItem);
-        }
     }
 
     private DrinkCategoryResponse toResponse(DrinkCategory category) {

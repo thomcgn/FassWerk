@@ -28,6 +28,68 @@ try {
     assert.ok(result.status >= 200 && result.status < 300, `${method} ${path}: HTTP ${result.status}`);
     return result.status === 204 ? null : JSON.parse(result.text);
   }
+  async function login(device, origin) {
+    await device.goto(`${origin}/login`);
+    await device.locator('input[type=email]').fill(process.env.BOOTSTRAP_ADMIN_EMAIL);
+    await device.locator('input[type=password]').fill(process.env.BOOTSTRAP_ADMIN_PASSWORD);
+    await device.locator('button[type=submit]').click();
+    await device.waitForURL('**/inventory');
+  }
+  async function verifyRecovery(state) {
+    // A new device has neither cookies nor local/session storage from the original browser.
+    const fresh = await browser.newContext();
+    try {
+      const device = await fresh.newPage();
+      await device.goto(`${right}/login`);
+      assert.deepEqual(await device.evaluate(() => [localStorage.length, sessionStorage.length]), [0, 0]);
+      await login(device, right);
+      await device.goto(`${right}/table-billing`);
+      const archived = device.getByRole('button', { name: `Bon #${state.unpaidOrderId} laden`, exact: true });
+      await expect(archived).toBeVisible();
+      const table = device.getByRole('button', { name: /Audit table.*OCCUPIED/ });
+      await expect(table).toBeVisible();
+      await table.click();
+      const dialog = device.getByRole('dialog', { name: 'Tischdetail' });
+      await expect(dialog).toContainText(`Bon #${state.orderId}`);
+      await expect(dialog.getByText('1 × 3,00 €', { exact: true })).toBeVisible();
+      await expect(dialog.getByRole('button', { name: 'Bezahlen', exact: true })).toBeEnabled();
+      // Discard every browser cache and rebuild the same open bill after reload.
+      await device.evaluate(() => { localStorage.clear(); sessionStorage.clear(); });
+      await device.reload();
+      await table.click();
+      await expect(dialog).toContainText(`Bon #${state.orderId}`);
+      await expect(dialog.getByText('1 × 3,00 €', { exact: true })).toBeVisible();
+      await device.goto(`${right}/table-billing`);
+      await archived.click();
+      await expect(dialog).toContainText(`Bon #${state.unpaidOrderId}`);
+      await expect(dialog.getByRole('button', { name: 'Wieder oeffnen', exact: true })).toBeEnabled();
+      await expect(dialog.getByText('1 × 3,00 €', { exact: true })).toBeVisible();
+      await device.goto(`${right}/table-billing`);
+      await device.getByPlaceholder('Order ID').fill(String(state.paidOrderId));
+      await device.getByRole('button', { name: 'Laden', exact: true }).click();
+      await expect(dialog).toContainText(`Bon #${state.paidOrderId}`);
+      await expect(dialog.getByRole('button', { name: 'Bezahlen', exact: true })).toBeDisabled();
+      await device.goto(`${right}/shift-settlement`);
+      await device.locator('#settlement-date').fill('2038-06-01');
+      await expect(device.locator('#opening-cash')).toHaveValue('100');
+      await expect(device.locator('#other-expenses')).toHaveValue('5');
+      await expect(device.getByPlaceholder('Mitarbeitername')).toHaveValue('Recovery worker');
+      await expect(device.locator('input[type=time]').first()).toHaveValue('18:00');
+      await expect(device.locator('input[type=time]').nth(1)).toHaveValue('22:00');
+      // Authenticated server reads verify the associated reservation and exact stock too.
+      const recovered = await device.evaluate(async ({ state }) => {
+        const read = async path => { const r = await fetch(path); if (!r.ok) throw new Error(`Recovery GET: ${r.status}`); return r.json(); };
+        return { reservation: (await read('/api/reservations')).find(r => r.id === state.reservationId),
+          stock: (await read('/api/inventory')).find(i => i.id === state.inventoryId),
+          open: await read(`/api/table-orders/${state.orderId}`) };
+      }, { state });
+      assert.equal(recovered.reservation.status, 'CHECKED_IN');
+      assert.equal(recovered.open.status, 'OPEN');
+      assert.equal(recovered.open.items[0].quantity, 1);
+      assert.equal(Number(recovered.stock.totalStockAmount), 9.25);
+      console.log(`PASS: ${phase} restart — fresh-device login, cache-free reload, open/unpaid/paid split receipts, occupancy and saved shift`);
+    } finally { await fresh.close(); }
+  }
   if (phase === 'before') {
     await page.goto(`${left}/login`);
     await page.locator('input[type=email]').fill(process.env.BOOTSTRAP_ADMIN_EMAIL);
@@ -130,7 +192,11 @@ try {
       });
       await trigger();
       await expect(page.getByRole('button', { name: 'Offene Aktion wiederholen', exact: true })).toBeVisible({ timeout: 8000 });
-      if (reload) await page.reload();
+      if (reload === 'login') {
+        await context.clearCookies();
+        await login(page, left);
+        await page.goto(`${left}/table-billing`);
+      } else if (reload) await page.reload();
       await page.getByRole('button', { name: 'Offene Aktion wiederholen', exact: true }).click();
       await expect(page.getByRole('button', { name: 'Offene Aktion wiederholen', exact: true })).toHaveCount(0);
       await expect.poll(() => attempts).toBe(2);
@@ -174,20 +240,31 @@ try {
     await page.getByPlaceholder('Order ID').fill(String(order.id));
     await page.getByRole('button', { name: 'Laden', exact: true }).click();
     const uiSplit = await lostUiAction(`/api/table-orders/${order.id}/split-payment`,
-      () => page.getByRole('button', { name: 'Teilzahlung', exact: true }).click());
+      () => page.getByRole('button', { name: 'Teilzahlung', exact: true }).click(), 'login');
     const split = await api(`/api/table-orders/${order.id}/split-payment`, 'POST', splitBody, uiSplit.key, right);
     assert.equal(Number(split.paidOrder.total), 3);
     assert.equal(split.openOrder.items[0].quantity, 1);
     const stock = (await api('/api/inventory')).find(item => item.id === inventory.id);
     assert.equal(Number(stock.totalStockAmount), 9.5);
-    await writeFile(`${directory}/state.json`, JSON.stringify({ reservationId: reservation.id, orderId: order.id,
-      inventoryId: inventory.id, addBody, splitBody, cancelItemId, splitKey: uiSplit.key, paidOrderId: split.paidOrder.id }), { mode: 0o600 });
+    const debtTable = await api('/api/tables', 'POST', { name: 'Recovery debt', seats: 2, status: 'FREE', active: true });
+    const debtOrder = await api('/api/table-orders/open', 'POST', { tableId: debtTable.id, reservationId: null });
+    await api(`/api/table-orders/${debtOrder.id}/items`, 'POST', { drinkVariantId: variant.id, quantity: 1 }, 'phase5-debt-add');
+    await api(`/api/table-orders/${debtOrder.id}/mark-unpaid`, 'POST', undefined, 'phase5-debt-archive');
+    await api('/api/shift-settlements/2038-06-01', 'PUT', { expectedRevision: shift.revision,
+      openingCash: 100, otherExpenses: 5,
+      entries: [{ employeeName: 'Recovery worker', shiftStart: '18:00', shiftEnd: '22:00', hourlyWage: 12.5 }] });
+    const recoveryState = { reservationId: reservation.id, orderId: order.id,
+      inventoryId: inventory.id, addBody, splitBody, cancelItemId, splitKey: uiSplit.key,
+      paidOrderId: split.paidOrder.id, unpaidOrderId: debtOrder.id };
+    await verifyRecovery(recoveryState);
+    await writeFile(`${directory}/state.json`, JSON.stringify(recoveryState), { mode: 0o600 });
     await context.storageState({ path: `${directory}/browser.json` });
     console.log('PASS: browser login, two BFF refreshes, reservation/check-in, lost response, add retry, split and stock');
   } else {
     const state = JSON.parse(await readFile(`${directory}/state.json`, 'utf8'));
     const persistedShift = await api('/api/shift-settlements/2038-06-01');
-    assert.equal(persistedShift.revision, 2);
+    assert.equal(persistedShift.revision, 3);
+    await verifyRecovery(state);
     assert.equal(Number(persistedShift.openingCash), 100);
     // Same credentials, same commands, all application processes restarted.
     await api(`/api/table-orders/${state.orderId}/items`, 'POST', state.addBody, 'audit-lost-add');
@@ -195,12 +272,75 @@ try {
     const split = await api(`/api/table-orders/${state.orderId}/split-payment`, 'POST', state.splitBody, state.splitKey, right);
     assert.equal(split.paidOrder.id, state.paidOrderId);
     assert.equal(split.openOrder.items[0].quantity, 1);
-    assert.equal(Number((await api('/api/inventory')).find(item => item.id === state.inventoryId).totalStockAmount), 9.5);
+    assert.equal(Number((await api('/api/inventory')).find(item => item.id === state.inventoryId).totalStockAmount), 9.25);
     const closed = await api(`/api/table-orders/${state.orderId}/close`, 'POST');
     assert.equal(closed.status, 'CLOSED');
     await api(`/api/reservations/${state.reservationId}/complete`, 'POST');
     const reservations = await api('/api/reservations');
     assert.equal(reservations.find(item => item.id === state.reservationId).status, 'COMPLETED');
+
+    // Booked prices survive catalog changes, including after a completed payment.
+    const priceTable = await api('/api/tables', 'POST', { name: 'Price binding table', seats: 2, status: 'FREE', active: true });
+    const priceOrder = await api('/api/table-orders/open', 'POST', { tableId: priceTable.id, reservationId: null });
+    const priceVariant = (await api('/api/drink-variants')).find(v => v.id === state.addBody.drinkVariantId);
+    await api(`/api/table-orders/${priceOrder.id}/items`, 'POST', { drinkVariantId: priceVariant.id, quantity: 1 }, 'phase6-old-price');
+    await api(`/api/drink-variants/${priceVariant.id}`, 'PUT', { drinkId: priceVariant.drinkId,
+      displayVolumeName: priceVariant.displayVolumeName, volumeMl: priceVariant.volumeMl,
+      price: 4, useStandardPrice: false, active: true });
+    assert.equal(Number((await api(`/api/table-orders/${priceOrder.id}`)).total), 3);
+    assert.equal(Number((await api(`/api/table-orders/${state.paidOrderId}`)).total), 3);
+    const newPriced = await api(`/api/table-orders/${priceOrder.id}/items`, 'POST', { drinkVariantId: priceVariant.id, quantity: 1 }, 'phase6-new-price');
+    assert.equal(newPriced.items.length, 2);
+    assert.equal(Number(newPriced.total), 7);
+    await page.goto(`${left}/table-billing`);
+    await page.getByRole('button', { name: /Price binding table.*OCCUPIED/ }).click();
+    const priceDialog = page.getByRole('dialog', { name: 'Tischdetail' });
+    await expect(priceDialog.getByText('1 × 3,00 €', { exact: true })).toBeVisible();
+    await expect(priceDialog.getByText('1 × 4,00 €', { exact: true })).toBeVisible();
+    console.log('PASS: catalog price change preserves open/paid receipt prices; new sale has a separate price position');
+
+    // A direct checkout survives a lost response/reload without another stock or payment effect.
+    const tablesBeforeDirect = await api('/api/tables');
+    const stockBeforeDirect = Number((await api('/api/inventory')).find(i => i.id === state.inventoryId).totalStockAmount);
+    await page.goto(`${left}/direct-sales`);
+    await page.getByRole('button', { name: /Audit beer · 250 ml/ }).click();
+    await page.getByRole('button', { name: /Audit beer · 250 ml/ }).click();
+    await page.getByLabel('Zahlungsart').selectOption('CARD');
+    let directKey, directReceipt;
+    let directAttempts = 0;
+    await page.route(`${left}/api/table-orders/direct`, async route => {
+      const key = route.request().headers()['idempotency-key'];
+      assert.ok(key);
+      if (directKey) assert.equal(key, directKey);
+      directKey = key;
+      const upstream = await route.fetch();
+      assert.ok(upstream.ok(), `Direct sale HTTP ${upstream.status()}`);
+      const receipt = await upstream.json();
+      if (directReceipt) assert.equal(receipt.id, directReceipt.id);
+      directReceipt = receipt;
+      if (++directAttempts === 1) await route.abort('connectionreset');
+      else await route.fulfill({ response: upstream });
+    });
+    await page.getByRole('button', { name: 'Zahlung erhalten – abschließen', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Offene Aktion wiederholen' })).toBeVisible();
+    await page.reload();
+    await page.getByRole('button', { name: 'Offene Aktion wiederholen' }).click();
+    await expect(page.getByRole('status')).toContainText('Bereit für den nächsten Verkauf.');
+    assert.equal(directAttempts, 2);
+    assert.equal(directReceipt.saleType, 'DIRECT');
+    assert.equal(directReceipt.paymentMethod, 'CARD');
+    assert.equal(directReceipt.tableId, null);
+    assert.equal(directReceipt.reservationId, null);
+    assert.equal(directReceipt.status, 'CLOSED');
+    assert.equal(directReceipt.paid, true);
+    assert.equal(Number(directReceipt.total), 8);
+    assert.equal(Number((await api('/api/inventory')).find(i => i.id === state.inventoryId).totalStockAmount), stockBeforeDirect - 0.5);
+    assert.deepEqual(await api('/api/tables'), tablesBeforeDirect);
+    assert.equal(await page.evaluate(() => sessionStorage.getItem('fasswerk-direct-sale-pending-v1')), null);
+    await page.unroute(`${left}/api/table-orders/direct`);
+    const directArchive = await api('/api/table-orders/archive?query=Barverkauf&payment=PAID');
+    assert.ok(directArchive.some(o => o.id === directReceipt.id));
+    console.log('PASS: real direct checkout, card receipt, lost-response replay after reload, one stock deduction, no table occupancy');
 
     // Manual day close through the real UI/BFF: replay after reload cannot advance twice.
     const beforeDate = (await api('/api/inventory/configuration')).effectiveBusinessDate;

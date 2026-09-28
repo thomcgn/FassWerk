@@ -138,3 +138,62 @@ sie als Queryparameter. Veraltete Stände ergeben 409. Stammdaten-PUT verändert
 keine physische Bestandsmenge; Korrekturen bleiben Bewegungsbuchungen mit Begründung.
 Backend und Frontend gemeinsam aktualisieren, ohne alte und neue Backend-Schreiber
 parallel zu betreiben. Details: [Phase-2-Bericht](../docs/production/PHASE_2_REPORT.md).
+
+### Production-Roadmap: atomare Geschäftsprozesse (Phase 3)
+
+Bonposition, Bestandsbewegung, Absatz und Nachbestellberechnung werden gemeinsam
+gebucht. Zahlung, Teilbon, Tischfreigabe und Reservierungsabschluss bleiben ebenfalls
+transaktional; Zahlung erzeugt keinen zweiten Bestandsabgang. Neue PostgreSQL-Tests
+prüfen Fehler bis zum Commit, vollständigen Rollback und anschließende idempotente
+Wiederholung. Details und Abnahme: [Phase-3-Bericht](../docs/production/PHASE_3_REPORT.md).
+
+### Production-Roadmap: parallele Bestandsbuchungen (Phase 4)
+
+Konkurrenztests prüfen Verkäufe, gemeinsame Getränke-Bestände, Korrekturen, Storno,
+Überverkauf und wiederholte Befehle gegen PostgreSQL. Die bestehenden DB-Sperren
+schützen Mengen und Bewegungen; bezahlt wird ohne erneuten Warenverbrauch.
+Details und Abnahme: [Phase-4-Bericht](../docs/production/PHASE_4_REPORT.md).
+
+### Production-Roadmap: Server State & Recovery (Phase 5)
+
+Die reale Fullstack-Abnahme prüft nun zusätzlich einen frischen Browser mit neuem
+Login, Reload ohne Webspeicher sowie offene, unbezahlte und bereits teilbezahlte
+Bons und gespeicherte Schichten vor und nach App-Neustart. Eine verlorene
+Teilzahlungsantwort wird nach erneutem Login mit demselben Schlüssel wiederholt.
+Ungespeicherte Formulare bleiben Entwürfe; automatische Speicherung wird nicht
+behauptet. Details: [Phase-5-Bericht](../docs/production/PHASE_5_REPORT.md).
+
+### Production-Roadmap: Preisbindung und Audit (Phase 6)
+
+Gebuchte Bonpositionen behalten ihren Einzelpreis. Neue Bestellungen zu einem
+anderen Katalogpreis erhalten eine eigene Position; Standardpreisänderungen
+berechnen offene Bons nicht mehr neu. Preisänderungen nutzen den Buchungslock.
+
+V31 ergänzt ein transaktionales Auditjournal für Zahlung, Split, Storno,
+Bestandsbewegungen, Preise, Schichtspeicherungen und Tagesabschlüsse. Benutzer-ID,
+Zeit, fachlicher Bezug und Vorher-/Nachher-Werte bleiben erhalten; ein Auditfehler
+rollt die Buchung zurück. Keine rückwirkende Historie und keine neue Refund-API.
+Audit- und Restore-Nachweise sowie Betreiberabfragen:
+[Phase-6-Bericht](../docs/production/PHASE_6_REPORT.md).
+
+### Phase 7: Direktverkauf
+
+`POST /api/table-orders/direct` ist für ADMIN, BARCHEF und STAFF verfügbar und
+benötigt einen `Idempotency-Key`. Der Request enthält `paymentMethod` (`CASH` oder
+`CARD`) und `items` mit `drinkVariantId`, `quantity` und `expectedUnitPrice`.
+Bestätigte Preise werden gegen den Katalog geprüft; Abweichungen ergeben 409.
+Der gesamte Verkauf einschließlich Bestand, Sales, Nachbestellberechnung und
+Audit wird atomar gebucht und bezahlt geschlossen. Wiederholungen mit demselben
+Schlüssel und Payload liefern denselben Bon, abweichende Payloads ergeben 409.
+
+V32 ergänzt `saleType` (`TABLE`/`DIRECT`) und `paymentMethod`; `tableId` ist bei
+DIRECT null. Bestehende Bons bleiben TABLE und behalten ihre bisherigen Werte.
+Ein verzögerter DB-Trigger verhindert das Committen eines offenen DIRECT-Bons.
+Das Archiv enthält Direktbons als „Barverkauf“. Kartenerlöse zählen zum Umsatz,
+aber nicht zum erwarteten Bargeldbestand; historische Tischbons ohne Zahlungsart
+behalten die bisherige Bargeldbehandlung.
+
+Frontend: `/direct-sales`. Zahlung wird nur erfasst, kein Terminal angesteuert.
+Ein ungesendeter Warenkorb ist ein flüchtiger Entwurf. Bereits gesendete,
+ungeklärte Abschlüsse bleiben zur sicheren Wiederholung im Session-Speicher.
+Siehe [Phase-7-Report](../docs/production/PHASE_7_REPORT.md).

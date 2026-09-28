@@ -28,6 +28,7 @@ const staffNavItems = [
   { href: "/bookings", label: "Reservierungen", icon: CalendarDays },
   { href: "/bar-admin", label: "Bar Admin", icon: Beer },
   { href: "/sales-configuration", label: "Nachbestellung", icon: Settings },
+  { href: "/direct-sales", label: "Barverkauf", icon: Beer },
   { href: "/table-billing", label: "Tische", icon: Receipt },
   { href: "/shift-settlement", label: "Löhne", icon: Users },
   { href: "/sessions", label: "Sessions", icon: Users },
@@ -95,7 +96,7 @@ export function AppNav() {
           </Link>
 
           <div className="hidden min-w-0 flex-1 items-center justify-end gap-2 md:flex">
-            <nav className="flex min-w-0 flex-nowrap items-center justify-end gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <nav className="flex min-w-0 flex-nowrap items-center justify-start gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {navItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = isActivePath(pathname, item.href);
@@ -141,7 +142,7 @@ export function AppNav() {
       </header>
 
       <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-[color:var(--color-border-strong)] bg-[color:var(--color-surface)]/80 px-2 pb-safe-bottom pt-2 backdrop-blur-2xl md:hidden">
-        <div className={cn("mx-auto grid max-w-xl gap-1.5", authenticated ? "grid-cols-4" : "grid-cols-2")}>
+        <div className={cn("mx-auto grid max-w-xl gap-1.5", authenticated ? "grid-cols-5" : "grid-cols-2")}>
           {(authenticated ? staffNavItems : publicNavItems).map((item) => {
             const Icon = item.icon;
             const isActive = isActivePath(pathname, item.href);

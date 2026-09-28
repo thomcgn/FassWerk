@@ -1,0 +1,9 @@
+# Lokale Vorschau; zusammen mit docker-compose.yml und .env.preview verwenden.
+services:
+  postgres:
+    ports: !override []
+  backend:
+    ports: !override []
+  frontend:
+    ports: !override
+      - "127.0.0.1:13000:3000"

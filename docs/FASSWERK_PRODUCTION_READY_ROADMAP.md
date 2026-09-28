@@ -1,5 +1,14 @@
 # FassWerk – Production-Ready Roadmap für Codex
 
+## Vereinbarte Reihenfolge für UI und Flow
+
+Nutzerentscheidung vom 29.09.2026: Der umfassende Rehaul der komplexen,
+unübersichtlichen UI und Bedienabläufe kommt **ganz zum Schluss**, nach den
+fachlichen und technischen Phasen. Bis dahin nur die für die jeweilige Phase
+notwendigen UI-Ergänzungen und Fehlerkorrekturen. Phase 17 wird für diesen
+abschließenden Rehaul vorgemerkt; die übrige Phasenarbeit wird dadurch nicht
+vorgezogen oder ersetzt.
+
 ## Auftrag
 
 Entwickle FassWerk schrittweise vom aktuellen funktionsfähigen Stand zu einer belastbaren Anwendung für einen realen Gastronomiebetrieb.
@@ -572,9 +581,12 @@ Double-Submit-Buttons während laufender Requests UI-seitig verhindern – zusä
 
 ---
 
-# PHASE 17 – Gastro-UX unter Last
+# PHASE 17 – Gastro-UX unter Last / abschließender UI- und Flow-Rehaul
 
-Keine komplette Design-Neuentwicklung.
+Auf Nutzerwunsch vom 29.09.2026 ganz zum Schluss durchführen. Die frühere
+Begrenzung auf kleine UX-Optimierungen ist aufgehoben: Navigation, Informationsdichte
+und Bedienabläufe sollen als Ganzes überarbeitet werden. Zuerst die vorhandenen
+Arbeitsabläufe bewerten, dann ein zusammenhängendes Bedienkonzept umsetzen.
 
 Optimieren für:
 

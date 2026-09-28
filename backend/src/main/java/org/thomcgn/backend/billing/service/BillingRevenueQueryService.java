@@ -36,6 +36,11 @@ public class BillingRevenueQueryService implements BillingRevenueQueries {
     }
 
     @Override
+    public BigDecimal cashRevenue(java.time.LocalDate date) {
+        return items.cashRevenue(date, date.atStartOfDay(), date.plusDays(1).atStartOfDay());
+    }
+
+    @Override
     public BigDecimal revenue(LocalDateTime start, LocalDateTime end) {
         return items.getRevenueByClosedRange(TableOrderStatus.CLOSED, start, end);
     }

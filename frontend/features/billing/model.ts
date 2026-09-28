@@ -17,15 +17,16 @@ function parseOrderItem(value: unknown): TableOrderItem | null {
 }
 
 export function parseTableOrder(value: unknown): TableOrder | null {
-  if (!isRecord(value) || !isNumber(value.id) || !isNumber(value.tableId) || !isString(value.tableName)
+  if (!isRecord(value) || !isNumber(value.id) || !isNullableNumber(value.tableId) || !isString(value.tableName)
     || !isNullableNumber(value.reservationId) || (value.status !== "OPEN" && value.status !== "CLOSED")
     || typeof value.paid !== "boolean" || !isString(value.openedAt) || !isNullableString(value.closedAt)
-    || !isNumber(value.total)) return null;
+    || !isNumber(value.total) || (value.saleType !== "TABLE" && value.saleType !== "DIRECT")
+    || (value.paymentMethod !== null && value.paymentMethod !== "CASH" && value.paymentMethod !== "CARD")) return null;
   const items = parseArray(value.items, parseOrderItem);
   return items === null ? null : {
     id: value.id, tableId: value.tableId, tableName: value.tableName, reservationId: value.reservationId,
     status: value.status, paid: value.paid, openedAt: value.openedAt, closedAt: value.closedAt,
-    total: value.total, items,
+    total: value.total, items, saleType: value.saleType, paymentMethod: value.paymentMethod,
   };
 }
 

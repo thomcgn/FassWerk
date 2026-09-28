@@ -19,7 +19,7 @@ function stock(overrides = {}) {
   return { id: 1, revision: 0, name: "Fass", linkedDrinkId: null, linkedDrinkVariantId: null, packageType: "BARREL", packagesInStock: 1, contentPerPackage: 50, contentUnit: "LITER", totalStockAmount: 50, reorderThreshold: 10, minimumStock: 5, recommendedReorderAmount: 50, supplier: null, active: true, ...overrides };
 }
 function order(id, closedAt) {
-  return { id, tableId: 1, tableName: "T1", reservationId: null, status: "CLOSED", paid: false, openedAt: "2026-09-28T10:00:00Z", closedAt, total: 4, items: [] };
+  return { id, tableId: 1, saleType: "TABLE", paymentMethod: null, tableName: "T1", reservationId: null, status: "CLOSED", paid: false, openedAt: "2026-09-28T10:00:00Z", closedAt, total: 4, items: [] };
 }
 
 test("billing catalog only exposes variants backed by positive active stock", () => {
@@ -73,4 +73,11 @@ test("reservation view models separate actionable and terminal states", () => {
   assert.deepEqual(partitioned.actionable.map(({ id }) => id), [1, 2]);
   assert.deepEqual(partitioned.closed.map(({ id }) => id), [3]);
   assert.equal(groupReservationsByStatus(reservations).NO_SHOW.length, 1);
+});
+
+
+test("direct receipts accept no table and retain payment classification", () => {
+  const direct = { ...order(7, "2026-09-29T12:00:00"), tableId: null, tableName: "Barverkauf", saleType: "DIRECT", paymentMethod: "CARD", paid: true };
+  assert.deepEqual(parseTableOrders([direct]), [direct]);
+  assert.equal(parseTableOrders([{ ...direct, paymentMethod: "UNKNOWN" }]), null);
 });

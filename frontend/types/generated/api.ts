@@ -355,6 +355,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/table-orders/direct": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Direktverkauf atomar buchen und als bezahlt abschliessen */
+        post: operations["direct"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/reservations": {
         parameters: {
             query?: never;
@@ -1433,7 +1450,11 @@ export interface components {
             /** Format: int64 */
             id: number;
             /** Format: int64 */
-            tableId: number;
+            tableId: number | null;
+            /** @enum {string} */
+            saleType: "TABLE" | "DIRECT";
+            /** @enum {string|null} */
+            paymentMethod: "CASH" | "CARD" | null;
             tableName: string;
             /** Format: int64 */
             reservationId: number | null;
@@ -1460,6 +1481,20 @@ export interface components {
             tableId: number;
             /** Format: int64 */
             reservationId?: number | null;
+        };
+        /** @description Atomic direct sale with confirmed prices and received payment */
+        DirectSaleRequest: {
+            /** @enum {string} */
+            paymentMethod: "CASH" | "CARD";
+            items: components["schemas"]["Item"][];
+        };
+        /** @description Direct sale cart item with confirmed unit price */
+        Item: {
+            /** Format: int64 */
+            drinkVariantId: number;
+            /** Format: int32 */
+            quantity: number;
+            expectedUnitPrice: number;
         };
         /** @description Reservation Decision Request contract */
         ReservationDecisionRequest: {
@@ -2471,6 +2506,32 @@ export interface operations {
             };
             /** @description Fuer den Tisch existiert bereits ein offener Bon */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["TableOrderResponse"];
+                };
+            };
+        };
+    };
+    direct: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DirectSaleRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -1,6 +1,9 @@
 package org.thomcgn.backend.billing.service;
 
 import lombok.RequiredArgsConstructor;
+import org.thomcgn.backend.billing.api.dto.DirectSaleRequest;
+import org.thomcgn.backend.billing.domain.SaleType;
+import org.thomcgn.backend.common.application.IdempotencyKeys;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.thomcgn.backend.billing.api.dto.AddTableOrderItemRequest;
@@ -57,6 +60,51 @@ public class TableOrderService {
     private final org.springframework.context.ApplicationEventPublisher events;
 
     @Transactional
+    public TableOrderResponse directSale(DirectSaleRequest request, String rawKey) {
+        bookingLock.acquire();
+        String key = IdempotencyKeys.optional(rawKey);
+        if (key == null) throw new BadRequestException("Direct sale requires Idempotency-Key");
+        if (request.paymentMethod() == null || request.items() == null || request.items().isEmpty()
+                || request.items().size() > 100) throw new BadRequestException("Invalid direct sale");
+        java.util.Set<Long> variants = new java.util.HashSet<>();
+        for (var item : request.items()) {
+            if (item == null || item.drinkVariantId() == null || item.quantity() == null
+                    || item.quantity() < 1 || item.quantity() > 1000 || item.expectedUnitPrice() == null
+                    || item.expectedUnitPrice().signum() < 0 || !variants.add(item.drinkVariantId()))
+                throw new BadRequestException("Invalid or duplicate direct sale item");
+        }
+        String canonical = request.paymentMethod().name() + ":" + request.items().stream()
+                .sorted(Comparator.comparing(DirectSaleRequest.Item::drinkVariantId))
+                .map(i -> i.drinkVariantId() + ":" + i.quantity() + ":" + i.expectedUnitPrice().stripTrailingZeros().toPlainString())
+                .collect(java.util.stream.Collectors.joining(","));
+        String fingerprint = IdempotencyKeys.fingerprint(canonical);
+        var previous = operationRepository.findByOperationKey(key);
+        if (previous.isPresent()) {
+            var operation = previous.get();
+            if (!operation.getOperationType().equals("DIRECT_SALE")
+                    || !operation.getRequestFingerprint().equals(fingerprint))
+                throw new ConflictException("Idempotency-Key was already used for a different command");
+            return toResponse(operation.getOrder());
+        }
+        TableOrder order = new TableOrder();
+        order.setSaleType(SaleType.DIRECT);
+        order.setPaymentMethod(request.paymentMethod());
+        order.setStatus(TableOrderStatus.OPEN);
+        order.setPaid(false);
+        order.setOpenedAt(businessSettings.currentVenueTime());
+        orderRepository.saveAndFlush(order);
+        for (var item : request.items()) {
+            var result = addItem(order.getId(), new AddTableOrderItemRequest(item.drinkVariantId(), item.quantity()));
+            var booked = result.items().stream().filter(i -> i.drinkVariantId().equals(item.drinkVariantId())).findFirst().orElseThrow();
+            if (booked.unitPrice().compareTo(item.expectedUnitPrice()) != 0)
+                throw new ConflictException("Price changed; refresh the catalog and confirm the new price");
+        }
+        close(order.getId());
+        recordOperation(key, "DIRECT_SALE", order, fingerprint, null);
+        return toResponse(order);
+    }
+
+    @Transactional
     public TableOrderResponse open(OpenTableOrderRequest request) {
         bookingLock.acquire();
         TableEntity table = tableRepository.findById(request.tableId())
@@ -110,7 +158,7 @@ public class TableOrderService {
                 : variant.getPrice());
 
         LocalDate saleDate = businessSettings.getCurrentBusinessDate();
-        TableOrderItem savedItem = itemRepository.findFirstByTableOrderIdAndDrinkVariantIdAndSaleBusinessDate(order.getId(), variant.getId(), saleDate)
+        TableOrderItem savedItem = itemRepository.findFirstByTableOrderIdAndDrinkVariantIdAndSaleBusinessDateAndUnitPrice(order.getId(), variant.getId(), saleDate, unitPrice)
                 .map(existingItem -> {
                     int newQuantity = existingItem.getQuantity() + request.quantity();
                     existingItem.setQuantity(newQuantity);
@@ -453,6 +501,7 @@ public class TableOrderService {
     }
 
     private void releaseAfterClose(TableOrder order) {
+        if (order.getSaleType() == SaleType.DIRECT) return;
         var table = order.getTable();
         table.setStatus(orderRepository.hasOpenOrders(table.getId()) ? TableStatus.OCCUPIED : TableStatus.FREE);
         tableRepository.save(table);
@@ -479,6 +528,8 @@ public class TableOrderService {
         return new TableOrderResponse(
                 order.getId(),
                 resolveTableId(order),
+                order.getSaleType(),
+                order.getPaymentMethod(),
                 resolveTableName(order),
                 resolveReservationId(order),
                 order.getStatus(),
@@ -523,6 +574,7 @@ public class TableOrderService {
     }
 
     private String resolveTableName(TableOrder order) {
+        if (order.getSaleType() == SaleType.DIRECT) return "Barverkauf";
         try {
             return order.getTable() != null ? order.getTable().getName() : "Unbekannter Tisch";
         } catch (RuntimeException ignored) {

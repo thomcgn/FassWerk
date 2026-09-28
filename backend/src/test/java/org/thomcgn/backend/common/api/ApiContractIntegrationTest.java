@@ -93,6 +93,30 @@ class ApiContractIntegrationTest extends PostgresIntegrationTest {
         if (status == 405) assertThat(response.headers().firstValue("allow")).isPresent();
     }
 
+    @ParameterizedTest
+    @CsvSource({"ADMIN", "BARCHEF", "STAFF"})
+    void directSaleIsAvailableToStaffAndValidatesPaymentPayload(String role) throws Exception {
+        jdbc.update("update app_users set role=? where email='api@example.test'", role);
+        jdbc.update("update drink_variants set use_volume_standard_price=false where id=1");
+        AppUser actor = new AppUser();
+        actor.setId(900L); actor.setEmail("api@example.test"); actor.setName("API test");
+        actor.setRole(UserRole.valueOf(role)); actor.setActive(true);
+        String token = tokens.createAccessToken(actor).token();
+        String valid = "{\"paymentMethod\":\"CASH\",\"items\":[{\"drinkVariantId\":1,\"quantity\":1,\"expectedUnitPrice\":3}]}";
+        var builder = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/table-orders/direct"))
+                .header("Content-Type", "application/json").header("Idempotency-Key", "direct-http-" + role);
+        var client = HttpClient.newHttpClient();
+        var anonymous = client.send(builder.POST(HttpRequest.BodyPublishers.ofString(valid)).build(), HttpResponse.BodyHandlers.ofString());
+        assertThat(anonymous.statusCode()).isIn(401, 403);
+        builder.header("Authorization", "Bearer " + token);
+        var invalid = client.send(builder.POST(HttpRequest.BodyPublishers.ofString(valid.replace("\"quantity\":1", "\"quantity\":0"))).build(), HttpResponse.BodyHandlers.ofString());
+        assertError(invalid, 400);
+        var paid = client.send(builder.POST(HttpRequest.BodyPublishers.ofString(valid)).build(), HttpResponse.BodyHandlers.ofString());
+        assertThat(paid.statusCode()).as("Direct sale response: %s", paid.body()).isEqualTo(200);
+        assertThat(json.readTree(paid.body()).path("saleType").asText()).isEqualTo("DIRECT");
+        assertThat(json.readTree(paid.body()).path("tableId").isNull()).isTrue();
+    }
+
     @Test
     void malformedJsonIsBadRequestWithoutEchoingBody() throws Exception {
         var response = send("POST", "/api/tables", "{\"secret\":\"do-not-echo-this\",", "application/json");

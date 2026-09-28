@@ -34,6 +34,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class InventoryService {
 
+    private final org.thomcgn.backend.common.audit.AuditContext auditContext;
     private final InventoryItemRepository inventoryItemRepository;
     private final InventoryMovementRepository movementRepository;
     private final DrinkRepository drinkRepository;
@@ -64,6 +65,7 @@ public class InventoryService {
 
     @Transactional
     public InventoryItemResponse updateItem(Long id, InventoryItemRequest request) {
+        auditContext.bind();
         InventoryItem item = findItemForUpdate(id);
         assertRevision(item, request.expectedRevision());
         if (item.getContentUnit() != request.contentUnit()) {
@@ -79,6 +81,7 @@ public class InventoryService {
 
     @Transactional
     public void deleteItem(Long id, Long expectedRevision) {
+        auditContext.bind();
         InventoryItem item = findItemForUpdate(id);
         assertRevision(item, expectedRevision);
         // Löse Verknüpfung zum Getränk auf statt zu löschen
@@ -96,6 +99,7 @@ public class InventoryService {
 
     @Transactional
     public InventoryItemResponse adjust(Long id, InventoryAdjustmentRequest request, String actor, String idempotencyKey) {
+        auditContext.bind();
         InventoryItem item = findItemForUpdate(id);
         BigDecimal delta = request.increase() ? request.amount() : request.amount().negate();
         String key = org.thomcgn.backend.common.application.IdempotencyKeys.optional(idempotencyKey);

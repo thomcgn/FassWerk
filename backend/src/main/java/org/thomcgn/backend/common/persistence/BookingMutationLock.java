@@ -11,9 +11,11 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class BookingMutationLock {
     private final JdbcTemplate jdbc;
+    private final org.thomcgn.backend.common.audit.AuditContext auditContext;
 
     @Transactional(propagation = Propagation.MANDATORY)
     public void acquire() {
+        auditContext.bind();
         jdbc.execute("select pg_advisory_xact_lock(7100701)");
     }
 }

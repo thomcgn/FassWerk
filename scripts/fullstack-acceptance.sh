@@ -67,7 +67,7 @@ docker exec "$container" pg_dump -U "$DB_USER" -d acceptance -Fc > "$ACCEPTANCE_
 docker exec "$container" createdb -U "$DB_USER" restored
 docker exec -i "$container" pg_restore -U "$DB_USER" -d restored --exit-on-error < "$ACCEPTANCE_DIRECTORY/backup.dump"
 # Exact business-row and Flyway-history equality after a real dump/restore.
-for table in flyway_schema_history reservations reservation_tables table_orders table_order_items billing_operations inventory_items inventory_movements inventory_business_settings business_day_close_operations shift_settlements shift_worker_entries; do
+for table in business_audit_events flyway_schema_history reservations reservation_tables table_orders table_order_items billing_operations inventory_items inventory_movements inventory_business_settings business_day_close_operations shift_settlements shift_worker_entries; do
   original="$(docker exec "$container" psql -U "$DB_USER" -d acceptance -Atc "select md5(coalesce(string_agg(row_to_json(t)::text, ',' order by row_to_json(t)::text), '')) from $table t")"
   restored="$(docker exec "$container" psql -U "$DB_USER" -d restored -Atc "select md5(coalesce(string_agg(row_to_json(t)::text, ',' order by row_to_json(t)::text), '')) from $table t")"
   [[ "$original" == "$restored" ]]

@@ -34,6 +34,14 @@ public class TableOrderController {
 
     private final TableOrderService tableOrderService;
 
+    @PostMapping("/direct")
+    @Operation(summary = "Direktverkauf atomar buchen und als bezahlt abschliessen")
+    @SecurityRequirement(name = "bearerAuth")
+    public TableOrderResponse direct(@Valid @RequestBody org.thomcgn.backend.billing.api.dto.DirectSaleRequest request,
+            @RequestHeader("Idempotency-Key") String key) {
+        return tableOrderService.directSale(request, key);
+    }
+
     @PostMapping("/open")
     @Operation(summary = "Neuen offenen Tischbon erstellen")
     @SecurityRequirement(name = "bearerAuth")

@@ -41,11 +41,11 @@ function recalcOrderTotal(order: TableOrder) {
   order.total = Number(total.toFixed(2));
 }
 
-function findOpenOrder(state: FlowState, tableId: number): TableOrder | undefined {
+function findOpenOrder(state: FlowState, tableId: number | null): TableOrder | undefined {
   return state.orders.find((entry) => entry.tableId === tableId && entry.status === "OPEN");
 }
 
-function setTableStatus(state: FlowState, tableId: number, status: Table["status"]) {
+function setTableStatus(state: FlowState, tableId: number | null, status: Table["status"]) {
   const table = state.tables.find((entry) => entry.id === tableId);
   if (table) {
     table.status = status;
@@ -312,6 +312,8 @@ export async function mockFlowApis(page: Page, state: FlowState) {
     const created: TableOrder = {
       id: state.counters.orderId++,
       tableId: body.tableId,
+      saleType: "TABLE",
+      paymentMethod: null,
       tableName: table?.name ?? `T${body.tableId}`,
       reservationId: body.reservationId,
       status: "OPEN",
@@ -488,7 +490,7 @@ export async function mockFlowApis(page: Page, state: FlowState) {
 
     const paidOrder: TableOrder = {
       id: state.counters.orderId++,
-      tableId: order.tableId,
+      tableId: order.tableId, saleType: "TABLE", paymentMethod: null,
       tableName: order.tableName,
       reservationId: order.reservationId,
       status: "CLOSED",

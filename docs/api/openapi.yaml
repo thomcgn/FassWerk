@@ -798,6 +798,33 @@ paths:
                 $ref: "#/components/schemas/TableOrderResponse"
       security:
       - bearerAuth: []
+  /api/table-orders/direct:
+    post:
+      tags:
+      - Table Orders
+      summary: Direktverkauf atomar buchen und als bezahlt abschliessen
+      operationId: direct
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DirectSaleRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/TableOrderResponse"
+      security:
+      - bearerAuth: []
   /api/reservations:
     get:
       tags:
@@ -2845,7 +2872,9 @@ components:
       - items
       - openedAt
       - paid
+      - paymentMethod
       - reservationId
+      - saleType
       - status
       - tableId
       - tableName
@@ -2858,6 +2887,18 @@ components:
         tableId:
           type: integer
           format: int64
+          nullable: true
+        saleType:
+          type: string
+          enum:
+          - TABLE
+          - DIRECT
+        paymentMethod:
+          type: string
+          nullable: true
+          enum:
+          - CASH
+          - CARD
         tableName:
           type: string
         reservationId:
@@ -2912,6 +2953,44 @@ components:
           format: int64
           nullable: true
       description: Open Table Order Request contract
+    DirectSaleRequest:
+      required:
+      - items
+      - paymentMethod
+      type: object
+      properties:
+        paymentMethod:
+          type: string
+          enum:
+          - CASH
+          - CARD
+        items:
+          maxItems: 100
+          minItems: 1
+          type: array
+          items:
+            $ref: "#/components/schemas/Item"
+      description: Atomic direct sale with confirmed prices and received payment
+    Item:
+      required:
+      - drinkVariantId
+      - expectedUnitPrice
+      - quantity
+      type: object
+      properties:
+        drinkVariantId:
+          type: integer
+          format: int64
+        quantity:
+          maximum: 1000
+          minimum: 1
+          type: integer
+          format: int32
+        expectedUnitPrice:
+          minimum: 0.00
+          exclusiveMinimum: false
+          type: number
+      description: Direct sale cart item with confirmed unit price
     ReservationDecisionRequest:
       type: object
       properties:

@@ -2,6 +2,8 @@ package org.thomcgn.backend.billing.api.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import org.thomcgn.backend.billing.domain.TableOrderStatus;
+import org.thomcgn.backend.billing.domain.SaleType;
+import org.thomcgn.backend.billing.domain.PaymentMethod;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -10,7 +12,9 @@ import java.util.List;
 @Schema(description = "Table Order Response contract")
 public record TableOrderResponse(
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED) Long id,
-        @Schema(requiredMode = Schema.RequiredMode.REQUIRED) Long tableId,
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED, nullable = true) Long tableId,
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED) SaleType saleType,
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED, nullable = true) PaymentMethod paymentMethod,
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED) String tableName,
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED, nullable = true) Long reservationId,
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED) TableOrderStatus status,

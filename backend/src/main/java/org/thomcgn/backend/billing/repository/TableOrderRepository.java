@@ -43,14 +43,14 @@ public interface TableOrderRepository extends JpaRepository<TableOrder, Long> {
 
     @Query("""
             select o
-            from TableOrder o
+            from TableOrder o left join o.table t
             where o.status = :status
               and (o.closedBusinessDate = :businessDate
                 or (o.closedBusinessDate is null and o.closedAt >= :start and o.closedAt < :end))
               and (:paid is null or o.paid = :paid)
               and (
                 cast(:queryText as string) is null
-                or lower(cast(o.table.name as string)) like lower(concat('%', cast(:queryText as string), '%'))
+                or lower(coalesce(t.name, 'Barverkauf')) like lower(concat('%', cast(:queryText as string), '%'))
               )
             order by o.closedAt desc
             """)
@@ -65,12 +65,12 @@ public interface TableOrderRepository extends JpaRepository<TableOrder, Long> {
 
     @Query("""
             select o
-            from TableOrder o
+            from TableOrder o left join o.table t
             where o.status = :status
               and o.paid = false
               and (
                 cast(:queryText as string) is null
-                or lower(cast(o.table.name as string)) like lower(concat('%', cast(:queryText as string), '%'))
+                or lower(coalesce(t.name, 'Barverkauf')) like lower(concat('%', cast(:queryText as string), '%'))
               )
             order by o.closedAt desc
             """)

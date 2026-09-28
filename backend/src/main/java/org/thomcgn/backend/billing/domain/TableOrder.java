@@ -23,8 +23,15 @@ import java.time.LocalDateTime;
 public class TableOrder extends BaseEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "table_id", nullable = false)
+    @JoinColumn(name = "table_id")
     private TableEntity table;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private SaleType saleType = SaleType.TABLE;
+
+    @Enumerated(EnumType.STRING)
+    private PaymentMethod paymentMethod;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "reservation_id")

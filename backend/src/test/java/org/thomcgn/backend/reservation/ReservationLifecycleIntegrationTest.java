@@ -204,6 +204,43 @@ class ReservationLifecycleIntegrationTest extends PostgresIntegrationTest {
         assertThat(json.readTree(completed.body()).path("status").asText()).isEqualTo("COMPLETED");
     }
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    void failedPaymentKeepsReservationAndTableOccupiedUntilRetryCommits(boolean splitAll) {
+        var reservation = service.createReservation(request("18:00", 4));
+        service.confirm(reservation.getId());
+        when(clock.instant()).thenReturn(reservation.getStartsAt());
+        service.checkIn(reservation.getId());
+        long tableId = reservation.getAssignedTables().getFirst().getId();
+        var order = orders.getOpenByTable(tableId);
+        long variant = stockedVariant();
+        var populated = orders.addItem(order.id(),
+                new org.thomcgn.backend.billing.api.dto.AddTableOrderItemRequest(variant, 2));
+        var persistedItems = orders.getById(order.id()).items();
+        String key = "phase3-reservation-payment";
+        Runnable payment = splitAll
+                ? () -> orders.splitPayment(order.id(), split(populated.items().getFirst().id(), 2), key)
+                : () -> orders.close(order.id(), key);
+        jdbc.execute("alter table billing_operations add constraint phase3_visit_failure check(operation_key <> 'phase3-reservation-payment')");
+        try {
+            assertThatThrownBy(payment::run).hasStackTraceContaining("phase3_visit_failure");
+            assertThat(service.getById(reservation.getId()).getStatus()).isEqualTo(ReservationStatus.CHECKED_IN);
+            assertThat(tableStatus(tableId)).isEqualTo("OCCUPIED");
+            assertThat(orders.getOpenByTable(tableId).items()).isEqualTo(persistedItems);
+            assertThat(jdbc.queryForObject("select count(*) from table_orders where paid", Integer.class)).isZero();
+            assertThat(jdbc.queryForObject("select count(*) from billing_operations where operation_key=?",
+                    Integer.class, key)).isZero();
+        } finally {
+            jdbc.execute("alter table billing_operations drop constraint phase3_visit_failure");
+        }
+        payment.run();
+        payment.run();
+        assertThat(service.getById(reservation.getId()).getStatus()).isEqualTo(ReservationStatus.COMPLETED);
+        assertThat(tableStatus(tableId)).isEqualTo("FREE");
+        assertThat(jdbc.queryForObject("select count(*) from billing_operations where operation_key=?",
+                Integer.class, key)).isEqualTo(1);
+    }
+
     @Test void checkInOpensBookableBillsAndOnlyFullPaymentReleasesEachTable() {
         var reservation=service.createReservation(request("18:00",6));
         service.confirm(reservation.getId());

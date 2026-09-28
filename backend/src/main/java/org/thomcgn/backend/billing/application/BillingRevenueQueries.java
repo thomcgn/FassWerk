@@ -8,6 +8,8 @@ import java.util.List;
 public interface BillingRevenueQueries {
     /** Paid revenue grouped by the recorded business date, using [start, end). */
     List<BusinessDayRevenue> businessDays(java.time.LocalDate start, java.time.LocalDate end);
+    /** Cash revenue; historical table receipts without payment method retain their existing cash treatment. */
+    BigDecimal cashRevenue(java.time.LocalDate date);
     /** Returns revenue for the half-open interval [start, end). */
     BigDecimal revenue(LocalDateTime start, LocalDateTime end);
 

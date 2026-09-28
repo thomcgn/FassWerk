@@ -60,6 +60,25 @@ Nicht-Root, Root-Dateisystemschutz, tmpfs-Schreibrechte und Shutdown ohne SIGKIL
 Beim Ende entfernt es ausschliesslich die Ressourcen seines Testprojekts, inklusive
 dessen Wegwerf-Datenbank. Keine produktiven Zugangsdaten verwenden.
 
+## Lokale Vorschau in Docker Desktop
+
+Der Zwischenstand `c80400c` verwendet die lokalen Images
+`fasswerk/backend:preview-c80400c` und `fasswerk/frontend:preview-c80400c`.
+Die private, Git-ignorierte `.env.preview` enthaelt den Image-Tag und eigene
+Zufallszugangsdaten. Das Admin-Login steht dort unter `BOOTSTRAP_ADMIN_EMAIL`
+und `BOOTSTRAP_ADMIN_PASSWORD`.
+
+```bash
+docker compose --env-file .env.preview -p fasswerk-preview -f docker-compose.yml -f docker-compose.preview.yml up -d --no-build --wait
+docker compose --env-file .env.preview -p fasswerk-preview -f docker-compose.yml -f docker-compose.preview.yml stop
+```
+
+Aufruf: <http://localhost:13000>. In Docker Desktop erscheint das Projekt
+`fasswerk-preview`. Die Vorschau nutzt eine eigene, anfangs leere Datenbank im
+Volume `fasswerk-preview_postgres_data`. Stoppen erhaelt diese Daten. Backend und
+PostgreSQL sind nur im internen Docker-Netz erreichbar; das Frontend ist nur an
+Loopback gebunden. Fuer den lokalen Login `localhost` verwenden.
+
 ## Betrieb, Update und Rollback
 
 ```bash
