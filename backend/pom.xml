@@ -23,7 +23,7 @@
         <tomcat.version>11.0.25</tomcat.version>
         <mapstruct.version>1.6.3</mapstruct.version>
         <jjwt.version>0.12.7</jjwt.version>
-        <zxing.version>3.5.3</zxing.version>
+        <zxing.version>3.5.4</zxing.version>
         <pdfbox.version>3.0.4</pdfbox.version>
         <flyway.url>${env.DB_URL}</flyway.url>
         <flyway.user>${env.DB_USER}</flyway.user>
