@@ -57,7 +57,7 @@ export function ConsumptionMetadataForm({
             id: 0,
             inventoryItemId: inventoryItem.id,
             leadTimeDays: 3,
-            safetyStockFactor: "1.5",
+            safetyStockFactor: 1.5,
             weeksLookback: 4,
           };
           setEditedMetadata(defaults);
@@ -203,7 +203,7 @@ export function ConsumptionMetadataForm({
                     onChange={(e) =>
                       setEditedMetadata({
                         ...editedMetadata,
-                        safetyStockFactor: e.target.value,
+                        safetyStockFactor: Number(e.target.value),
                       })
                     }
                     className="w-24"

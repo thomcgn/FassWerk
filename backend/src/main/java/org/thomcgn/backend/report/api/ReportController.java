@@ -1,5 +1,8 @@
 package org.thomcgn.backend.report.api;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -15,12 +18,15 @@ import org.thomcgn.backend.report.service.RevenueReportService;
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/reports")
+@Tag(name = "Reports", description = "Umsatzuebersicht und Nachbestell-PDF")
+@SecurityRequirement(name = "bearerAuth")
 public class ReportController {
 
     private final ReorderReportService reorderReportService;
     private final RevenueReportService revenueReportService;
 
     @GetMapping(value = "/reorder-list.pdf", produces = MediaType.APPLICATION_PDF_VALUE)
+    @Operation(summary = "Nachbestellliste als PDF exportieren")
     public ResponseEntity<byte[]> reorderListPdf(@RequestParam(required = false) String supplier) {
         byte[] payload = reorderReportService.generateReorderPdf(supplier);
         String fileName = (supplier == null || supplier.isBlank())
@@ -33,6 +39,7 @@ public class ReportController {
     }
 
     @GetMapping("/revenue-overview")
+    @Operation(summary = "Umsatz- und Verbrauchsuebersicht laden")
     public RevenueOverviewResponse revenueOverview() {
         return revenueReportService.getOverview();
     }

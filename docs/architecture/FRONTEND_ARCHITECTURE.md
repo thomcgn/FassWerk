@@ -1,6 +1,6 @@
 # Frontend Architecture
 
-Stand: Phase 9, 2026-09-28.
+Stand: Phase 10, 2026-09-28.
 
 ## Boundary model
 
@@ -22,9 +22,10 @@ Feature-owned rules live below `frontend/features`:
 
 `frontend/lib/api-client.ts` is technical infrastructure. It reads the existing
 backend error envelope and rejects successful responses whose runtime shape does
-not match the feature parser. Compile-time DTOs remain centralized in
-`frontend/types/api.ts`; the manual runtime parsers are boundary guards, not a new
-API schema. Phase 10 decides generation versus contract tests.
+not match the feature parser. Compile-time DTOs are generated from `docs/api/openapi.yaml` into
+`frontend/types/generated/api.ts`. `frontend/types/api.ts` provides stable aliases
+for consumers without redefining DTO fields. The manual runtime parsers remain
+boundary guards, not a second API schema. See `API_CONTRACT.md`.
 
 ## Component rules
 
@@ -60,5 +61,6 @@ contract. No directive was removed merely to optimize a metric.
 No explicit `any`, `@ts-ignore` or ESLint suppression was found. Unsafe JSON
 assertions were removed from reservation, billing, inventory and catalog-admin
 flows. Assertions remain in secondary areas including shift settlement, sessions,
-sales configuration, metadata and auth helpers; these are recorded as residual
-work and must converge with the Phase-10 API-contract decision.
+sales configuration, metadata and auth helpers. Their compile-time shapes now come
+from generated schemas, but replacing unchecked runtime assertions remains separate
+boundary-hardening work.

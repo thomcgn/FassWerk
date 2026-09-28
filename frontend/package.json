@@ -12,7 +12,9 @@
     "test:e2e:ci": "E2E_FIXED_DATE=2026-03-20 E2E_FIXED_TIMESTAMP=2026-03-20T18:00:00.000Z playwright test --reporter=list,junit",
     "test:e2e:critical": "playwright test e2e/reservation-lifecycle.spec.ts e2e/table-billing-prerequisite-flow.spec.ts e2e/table-billing-split-payment.spec.ts e2e/inventory-deduction-order-events.spec.ts e2e/bar-admin-categories.spec.ts e2e/bar-admin-drink-tabs.spec.ts e2e/security-bff.spec.ts",
     "test:security": "node --experimental-strip-types --test test/security.test.mjs",
-    "test:unit": "node --experimental-strip-types --test test/frontend-models.test.mjs"
+    "test:unit": "node --experimental-strip-types --test test/frontend-models.test.mjs",
+    "api:generate": "openapi-typescript ../docs/api/openapi.yaml -o types/generated/api.ts",
+    "api:check": "openapi-typescript ../docs/api/openapi.yaml -o types/generated/api.ts --check"
   },
   "dependencies": {
     "@fullcalendar/daygrid": "^6.1.20",
@@ -41,6 +43,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.1",
+    "openapi-typescript": "^7.13.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

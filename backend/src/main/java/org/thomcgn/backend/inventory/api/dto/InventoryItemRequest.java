@@ -1,5 +1,6 @@
 package org.thomcgn.backend.inventory.api.dto;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -8,21 +9,26 @@ import org.thomcgn.backend.inventory.domain.PackageType;
 
 import java.math.BigDecimal;
 
+@Schema(description = "Inventory Item Request contract")
 public record InventoryItemRequest(
         @NotBlank String name,
-        Long linkedDrinkId,
-        Long linkedDrinkVariantId,
+        @Schema(nullable = true) Long linkedDrinkId,
+        @Schema(nullable = true) Long linkedDrinkVariantId,
         @NotNull PackageType packageType,
         @NotNull @DecimalMin("0.00") BigDecimal packagesInStock,
         @NotNull @DecimalMin("0.01") BigDecimal contentPerPackage,
         @NotNull ContentUnit contentUnit,
         @NotNull @DecimalMin("0.00") BigDecimal reorderThreshold,
         @NotNull @DecimalMin("0.00") BigDecimal minimumStock,
+        @Schema(nullable = true)
         @DecimalMin("0.00") BigDecimal recommendedReorderAmount,
+        @Schema(nullable = true)
         @DecimalMin("0.00") BigDecimal reorderThresholdPackages,
+        @Schema(nullable = true)
         @DecimalMin("0.00") BigDecimal minimumStockPackages,
+        @Schema(nullable = true)
         @DecimalMin("0.00") BigDecimal recommendedReorderPackages,
-        String supplier,
+        @Schema(nullable = true) String supplier,
         @NotNull Boolean active
 ) {
 }

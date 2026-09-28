@@ -1,5 +1,8 @@
 package org.thomcgn.backend.table.api;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -20,22 +23,27 @@ import java.util.List;
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/tables")
+@Tag(name = "Tables", description = "Tischstammdaten, Kapazitaet und Belegungsstatus")
+@SecurityRequirement(name = "bearerAuth")
 public class TableController {
 
     private final TableService tableService;
 
     @GetMapping
+    @Operation(summary = "Tische listen")
     public List<TableResponse> list() {
         return tableService.list();
     }
 
     @PostMapping
+    @Operation(summary = "Tisch anlegen")
     @ResponseStatus(HttpStatus.CREATED)
     public TableResponse create(@Valid @RequestBody TableRequest request) {
         return tableService.create(request);
     }
 
     @PutMapping("/{id}")
+    @Operation(summary = "Tisch aktualisieren")
     public TableResponse update(@PathVariable Long id, @Valid @RequestBody TableRequest request) {
         return tableService.update(id, request);
     }

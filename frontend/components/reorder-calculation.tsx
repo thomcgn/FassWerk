@@ -37,7 +37,7 @@ export function ReorderCalculationPanel({ inventoryItem }: { inventoryItem: Inve
   if (!calculation) return null;
 
   const weeksUntilStockout = calculation.weeksUntilStockout
-    ? parseFloat(calculation.weeksUntilStockout)
+    ? calculation.weeksUntilStockout
     : null;
   const isUrgent = calculation.isBelowThreshold || (weeksUntilStockout !== null && weeksUntilStockout < 1);
 

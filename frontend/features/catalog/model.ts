@@ -21,7 +21,7 @@ export function prepareDrinkBatch(categoryValue: string, drinkRows: BatchDrinkIn
   if (hasDuplicates(variants.map((row) => row.label))) return { batch: null, error: "Bitte doppelte Varianten-Labels in der Liste entfernen." };
   return { batch: { categoryId, drinks, variants }, error: null };
 }
-export function calculateAdjustedPrice(currentPrice: string, adjustment: string, mode: "ABSOLUTE" | "PERCENT"): number | null {
+export function calculateAdjustedPrice(currentPrice: number | string, adjustment: string, mode: "ABSOLUTE" | "PERCENT"): number | null {
   const current = Number(currentPrice);
   const value = Number(adjustment);
   if (!Number.isFinite(current) || !Number.isFinite(value)) return null;
@@ -30,7 +30,7 @@ export function calculateAdjustedPrice(currentPrice: string, adjustment: string,
 }
 
 function parseVolumePrice(value: unknown): VolumePrice | null {
-  if (!isRecord(value) || typeof value.id !== "number" || typeof value.volumeMl !== "number" || typeof value.price !== "string") return null;
+  if (!isRecord(value) || typeof value.id !== "number" || typeof value.volumeMl !== "number" || typeof value.price !== "number") return null;
   return { id: value.id, volumeMl: value.volumeMl, price: value.price };
 }
 export const parseVolumePrices = (value: unknown): VolumePrice[] | null => parseArray(value, parseVolumePrice);

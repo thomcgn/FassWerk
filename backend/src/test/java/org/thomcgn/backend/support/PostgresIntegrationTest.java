@@ -11,7 +11,7 @@ import java.util.UUID;
 
 /** One disposable database per test JVM; Ryuk owns cleanup, not cached Spring contexts. */
 public abstract class PostgresIntegrationTest {
-    private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16-alpine")
+    private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea")
             .withDatabaseName("fasswerk_test")
             .withUsername("fasswerk_test")
             .withPassword(UUID.randomUUID().toString());

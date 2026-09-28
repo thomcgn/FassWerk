@@ -8,7 +8,7 @@ const isNullableNumber = (value: unknown): value is number | null => value === n
 
 function parseOrderItem(value: unknown): TableOrderItem | null {
   if (!isRecord(value) || !isNumber(value.id) || !isNumber(value.drinkVariantId) || !isString(value.drinkLabel)
-    || !isNumber(value.quantity) || !isString(value.unitPrice) || !isString(value.totalPrice) || !isString(value.deductedVolumeMl)) return null;
+    || !isNumber(value.quantity) || !isNumber(value.unitPrice) || !isNumber(value.totalPrice) || !isNumber(value.deductedVolumeMl)) return null;
   return {
     id: value.id, drinkVariantId: value.drinkVariantId, drinkLabel: value.drinkLabel,
     quantity: value.quantity, unitPrice: value.unitPrice, totalPrice: value.totalPrice,
@@ -20,7 +20,7 @@ export function parseTableOrder(value: unknown): TableOrder | null {
   if (!isRecord(value) || !isNumber(value.id) || !isNumber(value.tableId) || !isString(value.tableName)
     || !isNullableNumber(value.reservationId) || (value.status !== "OPEN" && value.status !== "CLOSED")
     || typeof value.paid !== "boolean" || !isString(value.openedAt) || !isNullableString(value.closedAt)
-    || !isString(value.total)) return null;
+    || !isNumber(value.total)) return null;
   const items = parseArray(value.items, parseOrderItem);
   return items === null ? null : {
     id: value.id, tableId: value.tableId, tableName: value.tableName, reservationId: value.reservationId,
@@ -36,7 +36,7 @@ export function parseTable(value: unknown): Table | null {
     || (value.status !== "FREE" && value.status !== "OCCUPIED" && value.status !== "RESERVED" && value.status !== "READY_FOR_PAYMENT")
     || typeof value.active !== "boolean") return null;
   const seats = value.seats;
-  if (seats !== undefined && !isNullableNumber(seats)) return null;
+  if (!isNullableNumber(seats)) return null;
   return { id: value.id, name: value.name, area: value.area, status: value.status, active: value.active, seats };
 }
 
@@ -59,7 +59,7 @@ export const parseDrinks = (value: unknown): Drink[] | null => parseArray(value,
 
 export function parseDrinkVariant(value: unknown): DrinkVariant | null {
   if (!isRecord(value) || !isNumber(value.id) || !isNumber(value.drinkId) || !isString(value.drinkName)
-    || !isString(value.displayVolumeName) || !isNumber(value.volumeMl) || !isString(value.price)
+    || !isString(value.displayVolumeName) || !isNumber(value.volumeMl) || !isNumber(value.price)
     || typeof value.useStandardPrice !== "boolean" || !isNullableString(value.sku) || typeof value.active !== "boolean") return null;
   return { id: value.id, drinkId: value.drinkId, drinkName: value.drinkName, displayVolumeName: value.displayVolumeName, volumeMl: value.volumeMl, price: value.price, useStandardPrice: value.useStandardPrice, sku: value.sku, active: value.active };
 }
@@ -68,9 +68,11 @@ export const parseDrinkVariants = (value: unknown): DrinkVariant[] | null => par
 
 export function parseInventoryItem(value: unknown): InventoryItem | null {
   if (!isRecord(value) || !isNumber(value.id) || !isString(value.name) || !isNullableNumber(value.linkedDrinkId)
-    || !isNullableNumber(value.linkedDrinkVariantId) || !isString(value.packageType) || !isString(value.packagesInStock)
-    || !isString(value.contentPerPackage) || !isString(value.contentUnit) || !isString(value.totalStockAmount)
-    || !isString(value.reorderThreshold) || !isString(value.minimumStock) || !isString(value.recommendedReorderAmount)
+    || !isNullableNumber(value.linkedDrinkVariantId)
+    || (value.packageType !== "BARREL" && value.packageType !== "CRATE" && value.packageType !== "BOTTLE" && value.packageType !== "BOX" && value.packageType !== "SINGLE_BOTTLE")
+    || !isNumber(value.packagesInStock) || !isNumber(value.contentPerPackage)
+    || (value.contentUnit !== "LITER" && value.contentUnit !== "MILLILITER" && value.contentUnit !== "PIECE")
+    || !isNumber(value.totalStockAmount) || !isNumber(value.reorderThreshold) || !isNumber(value.minimumStock) || !isNumber(value.recommendedReorderAmount)
     || !isNullableString(value.supplier) || typeof value.active !== "boolean") return null;
   return {
     id: value.id, name: value.name, linkedDrinkId: value.linkedDrinkId, linkedDrinkVariantId: value.linkedDrinkVariantId,
@@ -121,7 +123,7 @@ export function toGermanDateLabel(value: string): string {
   const parsed = new Date(`${value}T00:00:00`);
   return Number.isNaN(parsed.getTime()) ? value : new Intl.DateTimeFormat("de-DE", { dateStyle: "medium" }).format(parsed);
 }
-export function toCurrency(value: string): string {
+export function toCurrency(value: number): string {
   const amount = Number(value);
   return Number.isNaN(amount) ? `${value} EUR` : new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(amount);
 }

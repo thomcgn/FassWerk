@@ -1,14 +1,16 @@
 package org.thomcgn.backend.common.api;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.Instant;
 
+@Schema(description = "Api Error Response contract")
 public record ApiErrorResponse(
-        Instant timestamp,
-        int status,
-        String error,
-        String message,
-        String path,
-        String requestId
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED) Instant timestamp,
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED) int status,
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED) String error,
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED) String message,
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED) String path,
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED) String requestId
 ) {
 }
 

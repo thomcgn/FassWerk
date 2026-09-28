@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { Drink, DrinkCategory, DrinkVariant, SplitPaymentItemRequest, TableOrder } from "@/types/api";
 
-function toCurrency(value: string): string {
+function toCurrency(value: number | string): string {
   const amount = Number(value);
   if (Number.isNaN(amount)) return `${value} EUR`;
   return new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(amount);

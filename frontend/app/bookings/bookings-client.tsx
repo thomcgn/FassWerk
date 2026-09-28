@@ -265,7 +265,7 @@ export default function BookingsClient({ isAuthenticated }: Props) {
                   <Input
                     id="contactEmail"
                     type="email"
-                    value={form.contactEmail}
+                    value={form.contactEmail ?? ""}
                     onChange={(event) => setForm((s) => ({ ...s, contactEmail: event.target.value }))}
                     placeholder="gast@example.com"
                     className="pl-10"
@@ -278,7 +278,7 @@ export default function BookingsClient({ isAuthenticated }: Props) {
                   <Phone className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[color:var(--color-muted-foreground)]" />
                   <Input
                     id="contactPhone"
-                    value={form.contactPhone}
+                    value={form.contactPhone ?? ""}
                     onChange={(event) => setForm((s) => ({ ...s, contactPhone: event.target.value }))}
                     placeholder="+49 ..."
                     className="pl-10"

@@ -20,16 +20,22 @@ export function reservationBase(overrides: Record<string, unknown> = {}) {
     checkedInAt: null,
     qrCodeToken: "qr-token",
     qrScanUrl: "https://example.test/qr-token",
+    assignedTableIds: [],
+    durationMinutes: null,
+    startsAt: `${todayIsoDate()}T19:00:00.000Z`,
+    endsAt: null,
+    businessDate: todayIsoDate(),
+    timezone: "Europe/Berlin",
     ...overrides,
   };
 }
 
 export function tableBillingMeta() {
   return {
-    tables: [{ id: 1, name: "T1", area: "INSIDE", status: "FREE", active: true }],
+    tables: [{ id: 1, name: "T1", area: "INSIDE", status: "FREE", active: true, seats: null }],
     categories: [{ id: 11, name: "Bier", sortOrder: 10, active: true }],
     drinks: [{ id: 21, categoryId: 11, categoryName: "Bier", name: "Helles", description: null, imageUrl: null, active: true }],
-    variants: [{ id: 31, drinkId: 21, drinkName: "Helles", displayVolumeName: "0,5 l", volumeMl: 500, price: "5.90", useStandardPrice: true, sku: null, active: true }],
+    variants: [{ id: 31, drinkId: 21, drinkName: "Helles", displayVolumeName: "0,5 l", volumeMl: 500, price: 5.9, useStandardPrice: true, sku: null, active: true }],
   };
 }
 

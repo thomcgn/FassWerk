@@ -21,7 +21,7 @@ type WorkerEntryForm = {
 
 type HistoryPreset = "WEEK" | "MONTH";
 
-function formatCurrency(value: string): string {
+function formatCurrency(value: number | string): string {
   const amount = Number(value);
   if (!Number.isFinite(amount)) return `${value} EUR`;
   return new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(amount);
@@ -68,7 +68,7 @@ function toFormEntries(entries: ShiftWorkerEntry[]): WorkerEntryForm[] {
     employeeName: entry.employeeName,
     shiftStart: normalizeTimeInput(entry.shiftStart),
     shiftEnd: normalizeTimeInput(entry.shiftEnd),
-    hourlyWage: entry.hourlyWage,
+    hourlyWage: String(entry.hourlyWage),
   }));
 }
 
@@ -108,8 +108,8 @@ export default function ShiftSettlementClient() {
 
       const payload = (await response.json()) as ShiftSettlement;
       setSettlement(payload);
-      setOpeningCash(payload.openingCash);
-      setOtherExpenses(payload.otherExpenses);
+      setOpeningCash(String(payload.openingCash));
+      setOtherExpenses(String(payload.otherExpenses));
       setEntries(toFormEntries(payload.entries));
       setState("ready");
     } catch {
@@ -213,8 +213,8 @@ export default function ShiftSettlementClient() {
 
     const saved = (await response.json()) as ShiftSettlement;
     setSettlement(saved);
-    setOpeningCash(saved.openingCash);
-    setOtherExpenses(saved.otherExpenses);
+    setOpeningCash(String(saved.openingCash));
+    setOtherExpenses(String(saved.otherExpenses));
     setEntries(toFormEntries(saved.entries));
     setStatus("Schichtabrechnung wurde gespeichert.");
   }
@@ -222,9 +222,9 @@ export default function ShiftSettlementClient() {
   const totals = useMemo(() => {
     if (!settlement) {
       return {
-        revenue: "0.00",
-        wages: "0.00",
-        expectedCash: "0.00",
+        revenue: 0,
+        wages: 0,
+        expectedCash: 0,
       };
     }
     return {

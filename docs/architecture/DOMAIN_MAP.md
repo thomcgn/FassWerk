@@ -353,6 +353,15 @@ The frontend mirrors backend ownership only where rules are actually needed:
 `features/reservation`, `features/billing`, `features/inventory` and
 `features/catalog` contain pure view/application models. App Router files remain
 composition and BFF-facing adapters; shared UI components remain presentation.
-`lib/api-client.ts` is technical infrastructure, while `types/api.ts` remains the
-single compile-time DTO location until Phase 10 decides the API-contract strategy.
-No frontend feature is allowed to redefine backend transactional invariants.
+`lib/api-client.ts` is technical infrastructure. Compile-time DTOs flow from the
+backend through `docs/api/openapi.yaml` and `types/generated/api.ts`; `types/api.ts`
+contains aliases only. Runtime parsers validate untrusted input without redefining
+the transport contract. No frontend feature is allowed to redefine backend
+transactional invariants.
+
+## Phase 10: API Contract
+
+Spring MVC DTOs and Springdoc annotations own the authored transport contract. The
+committed OpenAPI snapshot and generated TypeScript are derived artifacts guarded
+by CI drift checks. Dedicated reservation settings DTOs prevent application-internal
+records from becoming accidental HTTP contracts. See `API_CONTRACT.md`.

@@ -1,6 +1,8 @@
 spring:
   application:
     name: backend
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
   datasource:
     url: ${DB_URL:}
     username: ${DB_USER:}
@@ -32,8 +34,12 @@ spring:
 
 server:
   port: ${SERVER_PORT:8080}
+  shutdown: graceful
 
 management:
+  health:
+    mail:
+      enabled: ${RESERVATION_MAIL_ENABLED:false}
   endpoints:
     web:
       exposure:
@@ -95,4 +101,7 @@ app:
       enabled: ${RESERVATION_MAIL_ENABLED:false}
       from: ${RESERVATION_MAIL_FROM:no-reply@fasswerk.local}
 
-
+springdoc:
+  api-docs:
+    # OpenAPI 3.0 carries nullable explicitly; the TypeScript generator consumes it deterministically.
+    version: OPENAPI_3_0

@@ -264,3 +264,27 @@ Details: [FRONTEND_ARCHITECTURE.md](FRONTEND_ARCHITECTURE.md) und
 [PHASE_9_REPORT.md](PHASE_9_REPORT.md). Sieben schnelle Fachmodelltests und die
 bestehenden drei Security-Tests ergaenzen Build, TypeScript, Lint und 18 kritische
 Browserfaelle.
+
+
+## Fortschritt nach Phase 10 (2026-09-28)
+
+| ID | Status nach Phase 10 |
+| --- | --- |
+| TD-022 | Behoben: Laufender prod-Profil-Export gegen PostgreSQL erzeugt die versionierte kanonische OpenAPI-Datei; lockfile-gepinnte Generierung ersetzt die manuell gepflegten Frontend-DTO-Felder. CI lehnt veralteten OpenAPI-Snapshot und veraltete TypeScript-Typen ab. |
+| TD-028 | Transportvertrag verbessert: Request-/Response-Schemas dokumentieren Required/Nullable explizit; ein HTTP-Contracttest prueft Struktur und zentrale Zahlen-/Nullvertraege. Die bereits dokumentierte semantische Sales-Konfigurationsluecke TD-020 bleibt bewusst offen. |
+| TD-027 | Compile-time DTO-Doppelpflege beseitigt. Die Phase-9-Laufzeitparser bleiben Sicherheitsgrenzen; ungepruefte JSON-Assertions in sekundaeren Bereichen sind weiterhin Runtime-Hardening, aber keine zweite Typwahrheit. |
+| TD-005 | Unveraendert: Der Generator ist lockfile-gepinnt; bestehende npm-Audit-Befunde wurden nicht mit `--force` veraendert und muessen separat bewertet werden. |
+
+Details: [API_CONTRACT.md](API_CONTRACT.md) und
+[PHASE_10_REPORT.md](PHASE_10_REPORT.md).
+
+## Fortschritt nach Phase 11 (2026-09-28)
+
+| ID | Status nach Phase 11 |
+| --- | --- |
+| TD-024 | App-Healthchecks und gesunde Startreihenfolge, Digest-gepinnte Basisimages, explizite Release-Tags, Nicht-Root, Read-only-Root, tmpfs, Capability-Drop und Graceful Shutdown umgesetzt und im isolierten Compose-Smoke-Test geprueft. Registry-Tag-Unveraenderlichkeit bleibt Betriebsaufgabe. |
+| TD-010 | Imagebau ist an Backend-/OpenAPI- und Frontend-/E2E-Gates gekoppelt; Container-Smoke-Test ergaenzt. Kein automatisches Publish, kein vollstaendiges Release-/Vulnerability-Gate; GitHub-Ausfuehrung lokal nicht nachgewiesen. |
+| TD-005 | Bestehende Abhaengigkeitsbefunde bleiben offen; Digest-Pinning ersetzt keine Sicherheitsupdates. |
+
+Details: [PHASE_11_REPORT.md](PHASE_11_REPORT.md) und
+[Docker Deployment](../deployment-docker.md).

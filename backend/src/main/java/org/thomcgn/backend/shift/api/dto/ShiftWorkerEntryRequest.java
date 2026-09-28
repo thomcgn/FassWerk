@@ -1,5 +1,6 @@
 package org.thomcgn.backend.shift.api.dto;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -7,6 +8,7 @@ import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
 import java.time.LocalTime;
 
+@Schema(description = "Shift Worker Entry Request contract")
 public record ShiftWorkerEntryRequest(
         @NotBlank String employeeName,
         @NotNull LocalTime shiftStart,

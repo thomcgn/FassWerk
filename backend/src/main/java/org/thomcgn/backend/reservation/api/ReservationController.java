@@ -23,6 +23,7 @@ import org.thomcgn.backend.reservation.api.dto.CreateReservationRequest;
 import org.thomcgn.backend.reservation.api.dto.ReservationDecisionRequest;
 import org.thomcgn.backend.reservation.api.dto.ReservationResponse;
 import org.thomcgn.backend.reservation.api.dto.ReservationScanResponse;
+import org.thomcgn.backend.reservation.api.dto.ReservationSettingsResponse;
 import org.thomcgn.backend.reservation.service.ReservationMapper;
 import org.thomcgn.backend.reservation.service.ReservationService;
 
@@ -60,8 +61,8 @@ public class ReservationController {
 
     @GetMapping("/settings")
     @Operation(summary = "Oeffentliche Buchungsregeln und lokale Zeit laden")
-    public ReservationService.SettingsResponse settings() {
-        return reservationService.settings();
+    public ReservationSettingsResponse settings() {
+        return ReservationSettingsResponse.from(reservationService.settings());
     }
 
     @PutMapping("/{id}")
@@ -72,6 +73,10 @@ public class ReservationController {
     }
 
     @PostMapping("/{id}/complete")
+    @Operation(
+            summary = "Reservierungsbesuch abschliessen",
+            description = "Beendet den Besuch; normalerweise erfolgt dies durch Bezahlen oder Archivieren aller Tischbons."
+    )
     @SecurityRequirement(name = "bearerAuth")
     public ReservationResponse complete(@PathVariable Long id) {
         return reservationMapper.toResponse(reservationService.complete(id));

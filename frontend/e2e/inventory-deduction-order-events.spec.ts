@@ -13,9 +13,9 @@ test("inventory: bestand wird nach Bon-Abschluss aktualisiert", async ({ page })
 
   // Fuer den Assertions-Flow setzen wir einen klaren Startbestand (10 l).
   if (flowState.inventory[0]) {
-    flowState.inventory[0].packagesInStock = "1";
-    flowState.inventory[0].contentPerPackage = "10";
-    flowState.inventory[0].totalStockAmount = "10";
+    flowState.inventory[0].packagesInStock = 1;
+    flowState.inventory[0].contentPerPackage = 10;
+    flowState.inventory[0].totalStockAmount = 10;
   }
 
   await page.goto("/table-billing");

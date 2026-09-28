@@ -12,9 +12,9 @@ if [[ "${OPENAPI_SKIP_BUILD:-false}" != "true" ]]; then
 fi
 VERSION="$(./mvnw -q help:evaluate -Dexpression=project.version -DforceStdout)"
 JAR_PATH="target/backend-${VERSION}.jar"
-OUT_FILE="${OUT_DIR}/openapi-v${VERSION}.yaml"
+OUT_FILE="${OPENAPI_OUT_FILE:-${OUT_DIR}/openapi-v${VERSION}.yaml}"
 LOG_FILE="${BACKEND_DIR}/target/openapi-backend.log"
-mkdir -p "${OUT_DIR}"
+mkdir -p "$(dirname "${OUT_FILE}")"
 TEMP_FILE="$(mktemp "${OUT_FILE}.XXXXXX")"
 BACKEND_PID=""
 
@@ -52,8 +52,9 @@ done
 curl -fsS --connect-timeout 2 --max-time 20 "${BASE_URL}/v3/api-docs.yaml" -o "${TEMP_FILE}" \
   || fail "OpenAPI download failed."
 grep -q '^openapi:' "${TEMP_FILE}" || fail "Response is not an OpenAPI YAML document."
+chmod 0644 "${TEMP_FILE}"
 mv "${TEMP_FILE}" "${OUT_FILE}"
 if [[ -n "${GITHUB_ENV:-}" ]]; then
-  echo "OPENAPI_FILE=docs/api/openapi-v${VERSION}.yaml" >> "${GITHUB_ENV}"
+  echo "OPENAPI_FILE=${OUT_FILE}" >> "${GITHUB_ENV}"
 fi
 echo "OpenAPI export erstellt: ${OUT_FILE}"

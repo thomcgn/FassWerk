@@ -264,3 +264,39 @@ threshold status, batch normalization/deduplication/volume validation, rounded
 price changes and reservation status partitioning. Runtime response parsers protect
 the refactored feature boundaries. The native TypeScript imports require Node
 >= 22.6 and currently retain the documented package-type warning.
+
+
+## Phase 10 API Contract
+
+The backend OpenAPI integration test starts a real HTTP server against PostgreSQL
+and verifies JSON/YAML export plus structural contract quality. The canonical
+snapshot and frontend aliases are checked with:
+
+```bash
+cd frontend
+npm run api:check
+npx tsc --noEmit
+```
+
+The CI `backend-openapi` job exports the prod-profile application to the committed
+`docs/api/openapi.yaml` path and fails on a Git diff before checking generated
+TypeScript. See `docs/architecture/API_CONTRACT.md` for the required change flow.
+
+## Docker runtime gate (Phase 11)
+
+CI builds the application images only after the backend/OpenAPI and frontend gates
+succeed, then runs `scripts/container-smoke.sh`. The smoke test uses a fresh Compose
+project, a disposable PostgreSQL volume and random loopback ports; local `.env` and
+override files are excluded. It verifies health, host HTTP access, effective non-root
+UIDs, read-only application roots, writable temporary/cache paths, capability drops,
+no-new-privileges and shutdown without OOM/SIGKILL. See
+[Docker deployment](deployment-docker.md) for prerequisites and local invocation.
+
+On Linux with Docker Desktop, point Testcontainers at the current context socket
+and use the daemon-side socket path for Ryuk (keep cleanup enabled):
+
+```bash
+cd backend
+DOCKER_HOST="$(docker context inspect --format '{{.Endpoints.docker.Host}}')" \
+TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock ./mvnw -B verify
+```

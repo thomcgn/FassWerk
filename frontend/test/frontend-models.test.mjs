@@ -11,22 +11,22 @@ const drinks = [
   { id: 11, categoryId: 1, categoryName: "Bier", name: "Alt", description: null, imageUrl: null, active: true },
 ];
 const variants = [
-  { id: 100, drinkId: 10, drinkName: "Pils", displayVolumeName: "0,3 l", volumeMl: 300, price: "3.50", useStandardPrice: false, sku: null, active: true },
-  { id: 101, drinkId: 10, drinkName: "Pils", displayVolumeName: "0,5 l", volumeMl: 500, price: "5.00", useStandardPrice: false, sku: null, active: true },
-  { id: 102, drinkId: 11, drinkName: "Alt", displayVolumeName: "0,3 l", volumeMl: 300, price: "3.40", useStandardPrice: false, sku: null, active: true },
+  { id: 100, drinkId: 10, drinkName: "Pils", displayVolumeName: "0,3 l", volumeMl: 300, price: 3.5, useStandardPrice: false, sku: null, active: true },
+  { id: 101, drinkId: 10, drinkName: "Pils", displayVolumeName: "0,5 l", volumeMl: 500, price: 5, useStandardPrice: false, sku: null, active: true },
+  { id: 102, drinkId: 11, drinkName: "Alt", displayVolumeName: "0,3 l", volumeMl: 300, price: 3.4, useStandardPrice: false, sku: null, active: true },
 ];
 function stock(overrides = {}) {
-  return { id: 1, name: "Fass", linkedDrinkId: null, linkedDrinkVariantId: null, packageType: "BARREL", packagesInStock: "1", contentPerPackage: "50", contentUnit: "LITER", totalStockAmount: "50", reorderThreshold: "10", minimumStock: "5", recommendedReorderAmount: "50", supplier: null, active: true, ...overrides };
+  return { id: 1, name: "Fass", linkedDrinkId: null, linkedDrinkVariantId: null, packageType: "BARREL", packagesInStock: 1, contentPerPackage: 50, contentUnit: "LITER", totalStockAmount: 50, reorderThreshold: 10, minimumStock: 5, recommendedReorderAmount: 50, supplier: null, active: true, ...overrides };
 }
 function order(id, closedAt) {
-  return { id, tableId: 1, tableName: "T1", reservationId: null, status: "CLOSED", paid: false, openedAt: "2026-09-28T10:00:00Z", closedAt, total: "4.00", items: [] };
+  return { id, tableId: 1, tableName: "T1", reservationId: null, status: "CLOSED", paid: false, openedAt: "2026-09-28T10:00:00Z", closedAt, total: 4, items: [] };
 }
 
 test("billing catalog only exposes variants backed by positive active stock", () => {
   const result = selectSellableCatalog(variants, [
     stock({ id: 1, linkedDrinkVariantId: 100 }),
     stock({ id: 2, linkedDrinkId: 11, packageType: "CRATE" }),
-    stock({ id: 3, linkedDrinkVariantId: 101, totalStockAmount: "0" }),
+    stock({ id: 3, linkedDrinkVariantId: 101, totalStockAmount: 0 }),
   ], drinks, [category]);
   assert.deepEqual(result.variants.map(({ id }) => id), [100, 102]);
   assert.deepEqual(result.drinks.map(({ id }) => id), [10, 11]);
@@ -47,8 +47,8 @@ test("inventory calculations handle crate units and thresholds", () => {
   assert.equal(calculateCrateContentPerPackage("LITER", "12", "0,75"), "9");
   assert.equal(calculateCrateContentPerPackage("MILLILITER", "12", "0.75"), "9000");
   assert.equal(calculateCrateContentPerPackage("PIECE", "24", "invalid"), "24");
-  assert.equal(getInventoryStatus(stock({ totalStockAmount: "10", reorderThreshold: "10" })).label, "Nachbestellen");
-  assert.deepEqual(formatStockForArticle(stock({ packageType: "CRATE", linkedDrinkVariantId: 100, totalStockAmount: "9", contentPerPackage: "9" }), variants), { primary: "30 Flaschen", secondary: "9 l" });
+  assert.equal(getInventoryStatus(stock({ totalStockAmount: 10, reorderThreshold: 10 })).label, "Nachbestellen");
+  assert.deepEqual(formatStockForArticle(stock({ packageType: "CRATE", linkedDrinkVariantId: 100, totalStockAmount: 9, contentPerPackage: 9 }), variants), { primary: "30 Flaschen", secondary: "9 l" });
 });
 
 test("drink batches are normalized and reject duplicates or unknown volumes", () => {

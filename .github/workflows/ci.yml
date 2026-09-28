@@ -41,15 +41,34 @@ jobs:
             --publish 127.0.0.1:5432:5432 \
             --env POSTGRES_DB=fasswerk_openapi \
             --env POSTGRES_USER=ci_openapi \
-            --env POSTGRES_PASSWORD postgres:16-alpine
+            --env POSTGRES_PASSWORD \
+            postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
 
       - name: Export OpenAPI
         env:
           SPRING_PROFILES_ACTIVE: prod
           OPENAPI_SKIP_BUILD: 'true'
-          # Schema export needs PostgreSQL, but does not use an SMTP server.
+          OPENAPI_OUT_FILE: ${{ github.workspace }}/docs/api/openapi.yaml
           MANAGEMENT_HEALTH_MAIL_ENABLED: 'false'
         run: ./scripts/export-openapi.sh
+
+      - name: Verify committed OpenAPI contract
+        run: git diff --exit-code -- ../docs/api/openapi.yaml
+
+      - name: Set up Node.js for contract generation
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend contract generator
+        working-directory: frontend
+        run: npm ci
+
+      - name: Verify generated frontend API types
+        working-directory: frontend
+        run: npm run api:check
 
       - name: Upload backend startup log
         if: failure()
@@ -89,6 +108,17 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Verify generated API types
+        run: npm run api:check
+
+      - name: Run frontend quality gate
+        run: |
+          npm run test:unit
+          npm run test:security
+          npm run lint
+          npx tsc --noEmit
+          npm run build
+
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
@@ -105,3 +135,39 @@ jobs:
           name: playwright-results
           path: frontend/test-results
 
+  container-images:
+    needs: [backend-openapi, frontend-e2e-critical]
+    runs-on: ubuntu-latest
+    env:
+      FASSWERK_IMAGE_TAG: sha-${{ github.sha }}
+      FASSWERK_VCS_REF: ${{ github.sha }}
+    steps:
+      - name: Checkout verified commit
+        uses: actions/checkout@v4
+
+      - name: Build SHA-tagged images
+        run: |
+          docker build \
+            --build-arg VCS_REF="$FASSWERK_VCS_REF" \
+            --build-arg IMAGE_VERSION="$FASSWERK_IMAGE_TAG" \
+            --tag "fasswerk/backend:$FASSWERK_IMAGE_TAG" backend
+          docker build \
+            --build-arg VCS_REF="$FASSWERK_VCS_REF" \
+            --build-arg IMAGE_VERSION="$FASSWERK_IMAGE_TAG" \
+            --tag "fasswerk/frontend:$FASSWERK_IMAGE_TAG" frontend
+
+      - name: Prepare disposable smoke-test credentials
+        run: |
+          DB_PASSWORD=$(openssl rand -hex 32)
+          JWT_SECRET=$(openssl rand -hex 48)
+          echo "::add-mask::$DB_PASSWORD"
+          echo "::add-mask::$JWT_SECRET"
+          {
+            echo "DB_USER=ci_container"
+            echo "DB_PASSWORD=$DB_PASSWORD"
+            echo "JWT_SECRET=$JWT_SECRET"
+            echo "APP_ORIGIN=http://localhost:3000"
+          } >> "$GITHUB_ENV"
+
+      - name: Verify hardened runtime
+        run: ./scripts/container-smoke.sh

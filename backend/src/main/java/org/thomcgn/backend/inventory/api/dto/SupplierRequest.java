@@ -1,25 +1,27 @@
 package org.thomcgn.backend.inventory.api.dto;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+@Schema(description = "Supplier Request contract")
 public record SupplierRequest(
     @JsonProperty("name")
-    String name,
+    @Schema(nullable = true) String name,
 
     @JsonProperty("contactEmail")
-    String contactEmail,
+    @Schema(nullable = true) String contactEmail,
 
     @JsonProperty("contactPhone")
-    String contactPhone,
+    @Schema(nullable = true) String contactPhone,
 
     @JsonProperty("website")
-    String website,
+    @Schema(nullable = true) String website,
 
     @JsonProperty("notes")
-    String notes,
+    @Schema(nullable = true) String notes,
 
     @JsonProperty("active")
-    Boolean active
+    @Schema(nullable = true) Boolean active
 ) {}
 
 

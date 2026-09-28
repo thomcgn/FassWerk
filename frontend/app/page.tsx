@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import type { DrinkVariant } from "@/types/api";
 
-function formatPrice(value: string): string {
+function formatPrice(value: number | string): string {
   const amount = Number(value);
   if (Number.isNaN(amount)) return `${value} EUR`;
   return new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(amount);

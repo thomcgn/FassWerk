@@ -1,46 +1,17 @@
 import type { Page, Route } from "@playwright/test";
 import { stableIsoTimestamp } from "./test-data";
 
-type Table = { id: number; name: string; area: string; status: "FREE" | "OCCUPIED" | "RESERVED" | "READY_FOR_PAYMENT"; active: boolean };
-type Category = { id: number; name: string; sortOrder: number; active: boolean };
-type Drink = { id: number; categoryId: number; categoryName: string; name: string; description: string | null; imageUrl: string | null; active: boolean };
-type Variant = { id: number; drinkId: number; drinkName: string; displayVolumeName: string; volumeMl: number; price: string; useStandardPrice: boolean; sku: string | null; active: boolean };
-type Inventory = {
-  id: number;
-  name: string;
-  linkedDrinkId: number | null;
-  linkedDrinkVariantId: number | null;
-  packageType: string;
-  packagesInStock: string;
-  contentPerPackage: string;
-  contentUnit: string;
-  totalStockAmount: string;
-  reorderThreshold: string;
-  minimumStock: string;
-  recommendedReorderAmount: string;
-  supplier: string | null;
-  active: boolean;
-};
-type TableOrderItem = { id: number; drinkVariantId: number; drinkLabel: string; quantity: number; unitPrice: string; totalPrice: string; deductedVolumeMl: string };
-type TableOrder = {
-  id: number;
-  tableId: number;
-  tableName: string;
-  reservationId: number | null;
-  status: "OPEN" | "CLOSED";
-  paid: boolean;
-  openedAt: string;
-  closedAt: string | null;
-  total: string;
-  items: TableOrderItem[];
-};
+import type {
+  Drink, DrinkCategory as Category, DrinkVariant as Variant, InventoryItem as Inventory,
+  Table, TableOrder, TableOrderItem, VolumePrice,
+} from "../../types/api";
 
 type FlowState = {
   tables: Table[];
   categories: Category[];
   drinks: Drink[];
   variants: Variant[];
-  volumePrices: Array<{ id: number; volumeMl: number; price: string }>;
+  volumePrices: VolumePrice[];
   inventory: Inventory[];
   defaults: Array<{ packageType: string; reorderThresholdPackages: number; minimumStockPackages: number; recommendedReorderPackages: number }>;
   orders: TableOrder[];
@@ -53,9 +24,9 @@ function json(route: Route, body: unknown, status = 200) {
   return route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
 }
 
-function toAmountString(value: number): string {
-  if (!Number.isFinite(value)) return "0";
-  return Number(value.toFixed(2)).toString();
+function toAmount(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Number(value.toFixed(2));
 }
 
 function cloneOrder(order: TableOrder): TableOrder {
@@ -67,7 +38,7 @@ function cloneOrder(order: TableOrder): TableOrder {
 
 function recalcOrderTotal(order: TableOrder) {
   const total = order.items.reduce((sum, item) => sum + Number(item.totalPrice), 0);
-  order.total = total.toFixed(2);
+  order.total = Number(total.toFixed(2));
 }
 
 function findOpenOrder(state: FlowState, tableId: number): TableOrder | undefined {
@@ -83,14 +54,14 @@ function setTableStatus(state: FlowState, tableId: number, status: Table["status
 
 export function createFlowState(options: SetupOptions = {}): FlowState {
   return {
-    tables: options.tables ?? [{ id: 1, name: "T1", area: "INSIDE", status: "OCCUPIED", active: true }],
+    tables: options.tables ?? [{ id: 1, name: "T1", area: "INSIDE", status: "OCCUPIED", active: true, seats: null }],
     categories: [],
     drinks: [],
     variants: [],
     volumePrices: [
-      { id: 1, volumeMl: 200, price: "3.90" },
-      { id: 2, volumeMl: 330, price: "4.50" },
-      { id: 3, volumeMl: 500, price: "5.90" },
+      { id: 1, volumeMl: 200, price: 3.9 },
+      { id: 2, volumeMl: 330, price: 4.5 },
+      { id: 3, volumeMl: 500, price: 5.9 },
     ],
     inventory: [],
     defaults: options.defaults ?? [],
@@ -221,14 +192,14 @@ export async function mockFlowApis(page: Page, state: FlowState) {
         active?: boolean;
       };
       const drink = state.drinks.find((entry) => entry.id === body.drinkId);
-      const priceFromVolume = state.volumePrices.find((entry) => entry.volumeMl === body.volumeMl)?.price ?? "5.90";
+      const priceFromVolume = state.volumePrices.find((entry) => entry.volumeMl === body.volumeMl)?.price ?? 5.9;
       const created: Variant = {
         id: state.counters.variantId++,
         drinkId: body.drinkId,
         drinkName: drink?.name ?? "Drink",
         displayVolumeName: body.displayVolumeName,
         volumeMl: body.volumeMl,
-        price: body.useStandardPrice ? priceFromVolume : String(body.price ?? priceFromVolume),
+        price: body.useStandardPrice ? priceFromVolume : Number(body.price ?? priceFromVolume),
         useStandardPrice: body.useStandardPrice,
         sku: body.sku ?? null,
         active: body.active ?? true,
@@ -259,10 +230,10 @@ export async function mockFlowApis(page: Page, state: FlowState) {
         name: string;
         linkedDrinkId: number | null;
         linkedDrinkVariantId: number | null;
-        packageType: string;
+        packageType: Inventory["packageType"];
         packagesInStock: number;
         contentPerPackage: number;
-        contentUnit: string;
+        contentUnit: Inventory["contentUnit"];
         reorderThreshold: number;
         minimumStock: number;
         recommendedReorderAmount?: number;
@@ -276,13 +247,13 @@ export async function mockFlowApis(page: Page, state: FlowState) {
         linkedDrinkId: body.linkedDrinkId,
         linkedDrinkVariantId: body.linkedDrinkVariantId,
         packageType: body.packageType,
-        packagesInStock: String(body.packagesInStock),
-        contentPerPackage: String(body.contentPerPackage),
+        packagesInStock: body.packagesInStock,
+        contentPerPackage: body.contentPerPackage,
         contentUnit: body.contentUnit,
-        totalStockAmount: toAmountString(totalStockAmount),
-        reorderThreshold: String(body.reorderThreshold),
-        minimumStock: String(body.minimumStock),
-        recommendedReorderAmount: String(body.recommendedReorderAmount ?? 0),
+        totalStockAmount: toAmount(totalStockAmount),
+        reorderThreshold: body.reorderThreshold,
+        minimumStock: body.minimumStock,
+        recommendedReorderAmount: body.recommendedReorderAmount ?? 0,
         supplier: body.supplier,
         active: body.active ?? true,
       };
@@ -307,6 +278,7 @@ export async function mockFlowApis(page: Page, state: FlowState) {
         area: body.area,
         status: body.status,
         active: body.active ?? true,
+        seats: null,
       };
       state.tables.push(created);
       await json(route, created, 201);
@@ -345,7 +317,7 @@ export async function mockFlowApis(page: Page, state: FlowState) {
       paid: false,
       openedAt: stableIsoTimestamp(),
       closedAt: null,
-      total: "0.00",
+      total: 0,
       items: [],
     };
     state.orders.push(created);
@@ -416,8 +388,8 @@ export async function mockFlowApis(page: Page, state: FlowState) {
     const existing = order.items.find((item) => item.drinkVariantId === variant.id);
     if (existing) {
       existing.quantity += body.quantity;
-      existing.totalPrice = (Number(existing.unitPrice) * existing.quantity).toFixed(2);
-      existing.deductedVolumeMl = String(variant.volumeMl * existing.quantity);
+      existing.totalPrice = Number((existing.unitPrice * existing.quantity).toFixed(2));
+      existing.deductedVolumeMl = variant.volumeMl * existing.quantity;
     } else {
       const item: TableOrderItem = {
         id: state.counters.orderItemId++,
@@ -425,8 +397,8 @@ export async function mockFlowApis(page: Page, state: FlowState) {
         drinkLabel: `${variant.drinkName} · ${variant.displayVolumeName}`,
         quantity: body.quantity,
         unitPrice: variant.price,
-        totalPrice: (Number(variant.price) * body.quantity).toFixed(2),
-        deductedVolumeMl: String(variant.volumeMl * body.quantity),
+        totalPrice: Number((variant.price * body.quantity).toFixed(2)),
+        deductedVolumeMl: variant.volumeMl * body.quantity,
       };
       order.items.push(item);
     }
@@ -460,8 +432,8 @@ export async function mockFlowApis(page: Page, state: FlowState) {
     } else {
       const unitVolumeMl = Number(item.deductedVolumeMl) / item.quantity;
       item.quantity -= 1;
-      item.totalPrice = (Number(item.unitPrice) * item.quantity).toFixed(2);
-      item.deductedVolumeMl = String(unitVolumeMl * item.quantity);
+      item.totalPrice = Number((item.unitPrice * item.quantity).toFixed(2));
+      item.deductedVolumeMl = unitVolumeMl * item.quantity;
     }
 
     recalcOrderTotal(order);
@@ -493,12 +465,12 @@ export async function mockFlowApis(page: Page, state: FlowState) {
         ...openItem,
         id: state.counters.orderItemId++,
         quantity: selected.quantity,
-        totalPrice: (Number(openItem.unitPrice) * selected.quantity).toFixed(2),
-        deductedVolumeMl: String((Number(openItem.deductedVolumeMl) / openItem.quantity) * selected.quantity),
+        totalPrice: Number((openItem.unitPrice * selected.quantity).toFixed(2)),
+        deductedVolumeMl: (openItem.deductedVolumeMl / openItem.quantity) * selected.quantity,
       });
       openItem.quantity -= selected.quantity;
-      openItem.totalPrice = (Number(openItem.unitPrice) * openItem.quantity).toFixed(2);
-      openItem.deductedVolumeMl = String((Number(openItem.deductedVolumeMl) / (openItem.quantity + selected.quantity)) * openItem.quantity);
+      openItem.totalPrice = Number((openItem.unitPrice * openItem.quantity).toFixed(2));
+      openItem.deductedVolumeMl = (openItem.deductedVolumeMl / (openItem.quantity + selected.quantity)) * openItem.quantity;
     }
 
     order.items = order.items.filter((item) => item.quantity > 0);
@@ -522,7 +494,7 @@ export async function mockFlowApis(page: Page, state: FlowState) {
       paid: true,
       openedAt: order.openedAt,
       closedAt: stableIsoTimestamp(),
-      total: paidItems.reduce((sum, item) => sum + Number(item.totalPrice), 0).toFixed(2),
+      total: Number(paidItems.reduce((sum, item) => sum + item.totalPrice, 0).toFixed(2)),
       items: paidItems,
     };
     state.orders.push(paidOrder);
@@ -550,7 +522,7 @@ export async function mockFlowApis(page: Page, state: FlowState) {
         ?? state.inventory.find((entry) => entry.linkedDrinkId === variant.drinkId);
       if (!target) continue;
       const nextAmount = Math.max(0, Number(target.totalStockAmount) - Number(item.deductedVolumeMl) / 1000);
-      target.totalStockAmount = toAmountString(nextAmount);
+      target.totalStockAmount = toAmount(nextAmount);
     }
 
     order.status = "CLOSED";

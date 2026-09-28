@@ -1,10 +1,14 @@
 target
-.mvn
 .git
 .gitignore
+.github
 .idea
 *.iml
 .env
 .env.*
-
-
+*.log
+reports
+test-results
+coverage
+docs
+README.md

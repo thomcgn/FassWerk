@@ -995,7 +995,7 @@ export default function BarAdminClient() {
                           label: variant.displayVolumeName,
                           volumeMl: String(variant.volumeMl),
                           useStandardPrice: variant.useStandardPrice,
-                          price: variant.price,
+                          price: String(variant.price),
                           sku: variant.sku || "",
                         })}>
                           <Edit2 className="h-4 w-4" />

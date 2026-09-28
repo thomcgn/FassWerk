@@ -1,5 +1,6 @@
 package org.thomcgn.backend.inventory.api.dto;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -8,6 +9,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalTime;
 
+@Schema(description = "Reorder Order Request contract")
 public record ReorderOrderRequest(
     @NotNull
     @Positive
@@ -33,10 +35,10 @@ public record ReorderOrderRequest(
     LocalDate scheduledDeliveryDate,
 
     @JsonProperty("scheduledDeliveryTime")
-    LocalTime scheduledDeliveryTime,
+    @Schema(nullable = true) LocalTime scheduledDeliveryTime,
 
     @JsonProperty("notes")
-    String notes
+    @Schema(nullable = true) String notes
 ) {}
 
 

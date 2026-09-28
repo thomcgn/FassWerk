@@ -1,0 +1,3411 @@
+openapi: 3.0.1
+info:
+  title: FassWerk API
+  description: "API fuer Reservierung, Tischabrechnung, Lagerverwaltung, Bar-Administration\
+    \ und Schichtabrechnung."
+  contact:
+    name: FassWerk Team
+  version: 0.0.1-SNAPSHOT
+servers:
+- url: http://127.0.0.1:18081
+  description: Generated server url
+tags:
+- name: Tables
+  description: "Tischstammdaten, Kapazitaet und Belegungsstatus"
+- name: Table Orders
+  description: "Tischbon-Flow inkl. Positionen, Split-Payment und Abschluss"
+- name: Inventory
+  description: "Lagerverwaltung, Verbrauchstracking, Nachbestellung und Sales-Konfiguration"
+- name: Menu
+  description: "Bar-Administration fuer Kategorien, Getraenke, Varianten und Volumenpreise"
+- name: Shift Settlements
+  description: Schicht- und Lohnabrechnungen
+- name: Reorder Orders
+  description: Nachbestellungen mit Liefertag und Lieferant-Tracking
+- name: Reports
+  description: Umsatzuebersicht und Nachbestell-PDF
+- name: Authentication
+  description: "Login, Refresh, Sessionverwaltung und Logout"
+- name: Reservations
+  description: "Reservierungsanlage, Entscheidungen, Check-in und QR-Flow"
+paths:
+  /api/volume-prices/{volumeMl}:
+    put:
+      tags:
+      - Menu
+      summary: Volumenpreis fuer eine ml-Groesse aktualisieren
+      operationId: updateVolumePrice
+      parameters:
+      - name: volumeMl
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int32
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VolumePriceUpdateRequest"
+        required: true
+      responses:
+        "200":
+          description: Volumenpreis aktualisiert
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/VolumePriceResponse"
+      security:
+      - bearerAuth: []
+    delete:
+      tags:
+      - Menu
+      summary: Volumenpreis fuer eine ml-Groesse loeschen
+      operationId: deleteVolumePrice
+      parameters:
+      - name: volumeMl
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int32
+      responses:
+        "204":
+          description: Volumenpreis geloescht
+      security:
+      - bearerAuth: []
+  /api/tables/{id}:
+    put:
+      tags:
+      - Tables
+      summary: Tisch aktualisieren
+      operationId: update
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TableRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/TableResponse"
+      security:
+      - bearerAuth: []
+  /api/shift-settlements/{date}:
+    get:
+      tags:
+      - Shift Settlements
+      summary: Schichtabrechnung fuer ein Datum abrufen
+      operationId: getByDate
+      parameters:
+      - name: date
+        in: path
+        required: true
+        schema:
+          type: string
+          format: date
+      responses:
+        "200":
+          description: Schichtabrechnung geladen
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ShiftSettlementResponse"
+      security:
+      - bearerAuth: []
+    put:
+      tags:
+      - Shift Settlements
+      summary: Schichtabrechnung fuer ein Datum speichern
+      operationId: saveByDate
+      parameters:
+      - name: date
+        in: path
+        required: true
+        schema:
+          type: string
+          format: date
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShiftSettlementRequest"
+        required: true
+      responses:
+        "200":
+          description: Schichtabrechnung gespeichert
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ShiftSettlementResponse"
+      security:
+      - bearerAuth: []
+  /api/reservations/{id}:
+    get:
+      tags:
+      - Reservations
+      summary: Reservierung per ID abrufen
+      operationId: getById
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          description: Reservierung gefunden
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ReservationResponse"
+        "404":
+          description: Reservierung nicht gefunden
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ReservationResponse"
+      security:
+      - bearerAuth: []
+    put:
+      tags:
+      - Reservations
+      summary: Reservierung mit erneuter Kapazitaetspruefung aendern
+      operationId: update_1
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateReservationRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ReservationResponse"
+      security:
+      - bearerAuth: []
+  /api/reorder/suppliers/{id}:
+    put:
+      tags:
+      - Reorder Orders
+      summary: Lieferant aktualisieren
+      operationId: updateSupplier
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SupplierRequest"
+        required: true
+      responses:
+        "200":
+          description: Lieferant aktualisiert
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/SupplierResponse"
+      security:
+      - bearerAuth: []
+  /api/reorder/orders/{id}/status:
+    put:
+      tags:
+      - Reorder Orders
+      summary: Status einer Nachbestellung aendern
+      operationId: updateReorderStatus
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: status
+        in: query
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Status aktualisiert
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ReorderOrderResponse"
+      security:
+      - bearerAuth: []
+  /api/inventory/{id}:
+    put:
+      tags:
+      - Inventory
+      summary: Lagerartikel aktualisieren
+      operationId: update_2
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InventoryItemRequest"
+        required: true
+      responses:
+        "200":
+          description: Lagerartikel aktualisiert
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/InventoryItemResponse"
+        "404":
+          description: Lagerartikel nicht gefunden
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/InventoryItemResponse"
+      security:
+      - bearerAuth: []
+    delete:
+      tags:
+      - Inventory
+      summary: Lagerartikel loeschen
+      operationId: delete
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "204":
+          description: Lagerartikel geloescht
+        "404":
+          description: Lagerartikel nicht gefunden
+      security:
+      - bearerAuth: []
+  /api/inventory/{id}/consumption-metadata:
+    get:
+      tags:
+      - Inventory
+      summary: Verbrauchsmetadaten fuer Lagerartikel abrufen
+      operationId: getConsumptionMetadata
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          description: Metadaten geladen oder leer bei fehlender Konfiguration
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ConsumptionMetadataResponse"
+      security:
+      - bearerAuth: []
+    put:
+      tags:
+      - Inventory
+      summary: Verbrauchsmetadaten fuer Lagerartikel aktualisieren
+      operationId: updateConsumptionMetadata
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConsumptionMetadataRequest"
+        required: true
+      responses:
+        "200":
+          description: Verbrauchsmetadaten aktualisiert
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ConsumptionMetadataResponse"
+      security:
+      - bearerAuth: []
+  /api/inventory/configuration:
+    get:
+      tags:
+      - Inventory
+      summary: Globale Sales-/Business-Day-Konfiguration laden
+      operationId: getConfiguration
+      responses:
+        "200":
+          description: Konfiguration geladen
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/SalesConfigurationResponse"
+      security:
+      - bearerAuth: []
+    put:
+      tags:
+      - Inventory
+      summary: Globale Sales-/Business-Day-Konfiguration speichern
+      operationId: updateConfiguration
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SalesConfigurationRequest"
+        required: true
+      responses:
+        "200":
+          description: Konfiguration gespeichert
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/SalesConfigurationResponse"
+      security:
+      - bearerAuth: []
+  /api/drinks/{id}:
+    put:
+      tags:
+      - Menu
+      summary: Getraenk aktualisieren
+      operationId: updateDrink
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DrinkRequest"
+        required: true
+      responses:
+        "200":
+          description: Getraenk aktualisiert
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/DrinkResponse"
+      security:
+      - bearerAuth: []
+    delete:
+      tags:
+      - Menu
+      summary: Getraenk loeschen
+      operationId: deleteDrink
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "204":
+          description: Getraenk geloescht
+      security:
+      - bearerAuth: []
+  /api/drink-variants/{id}:
+    put:
+      tags:
+      - Menu
+      summary: Getraenkevariante aktualisieren
+      operationId: updateVariant
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DrinkVariantRequest"
+        required: true
+      responses:
+        "200":
+          description: Variante aktualisiert
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/DrinkVariantResponse"
+      security:
+      - bearerAuth: []
+    delete:
+      tags:
+      - Menu
+      summary: Getraenkevariante loeschen
+      operationId: deleteVariant
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "204":
+          description: Variante geloescht
+      security:
+      - bearerAuth: []
+  /api/drink-categories/{id}:
+    put:
+      tags:
+      - Menu
+      summary: Getraenkekategorie aktualisieren
+      operationId: updateCategory
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DrinkCategoryRequest"
+        required: true
+      responses:
+        "200":
+          description: Kategorie aktualisiert
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/DrinkCategoryResponse"
+      security:
+      - bearerAuth: []
+    delete:
+      tags:
+      - Menu
+      summary: Getraenkekategorie loeschen
+      operationId: deleteCategory
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "204":
+          description: Kategorie geloescht
+      security:
+      - bearerAuth: []
+  /api/volume-prices:
+    get:
+      tags:
+      - Menu
+      summary: Volumenpreise auflisten
+      operationId: listVolumePrices
+      responses:
+        "200":
+          description: Volumenpreise geladen
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VolumePriceResponse"
+      security:
+      - bearerAuth: []
+    post:
+      tags:
+      - Menu
+      summary: Volumenpreis anlegen oder aktualisieren
+      operationId: createVolumePrice
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VolumePriceRequest"
+        required: true
+      responses:
+        "201":
+          description: Volumenpreis erstellt oder aktualisiert
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/VolumePriceResponse"
+      security:
+      - bearerAuth: []
+  /api/tables:
+    get:
+      tags:
+      - Tables
+      summary: Tische listen
+      operationId: list
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TableResponse"
+      security:
+      - bearerAuth: []
+    post:
+      tags:
+      - Tables
+      summary: Tisch anlegen
+      operationId: create
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TableRequest"
+        required: true
+      responses:
+        "201":
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/TableResponse"
+      security:
+      - bearerAuth: []
+  /api/table-orders/{id}/split-payment:
+    post:
+      tags:
+      - Table Orders
+      summary: Teilzahlung fuer ausgewaehlte Positionen durchfuehren
+      operationId: splitPayment
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: Idempotency-Key
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SplitTableOrderPaymentRequest"
+        required: true
+      responses:
+        "200":
+          description: Teilzahlung verarbeitet
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/SplitTableOrderPaymentResponse"
+        "400":
+          description: Ungueltige Split-Zuordnung
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/SplitTableOrderPaymentResponse"
+      security:
+      - bearerAuth: []
+  /api/table-orders/{id}/reopen-unpaid:
+    post:
+      tags:
+      - Table Orders
+      summary: Unbezahlten Bon wieder oeffnen
+      operationId: reopenUnpaid
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          description: Bon wieder geoeffnet
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/TableOrderResponse"
+      security:
+      - bearerAuth: []
+  /api/table-orders/{id}/mark-unpaid:
+    post:
+      tags:
+      - Table Orders
+      summary: Bon als unbezahlt markieren
+      operationId: markUnpaid
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          description: Bon auf unbezahlt gesetzt
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/TableOrderResponse"
+      security:
+      - bearerAuth: []
+  /api/table-orders/{id}/items:
+    post:
+      tags:
+      - Table Orders
+      summary: Position auf offenen Bon buchen
+      operationId: addItem
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: Idempotency-Key
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddTableOrderItemRequest"
+        required: true
+      responses:
+        "200":
+          description: Position gebucht
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/TableOrderResponse"
+      security:
+      - bearerAuth: []
+  /api/table-orders/{id}/close:
+    post:
+      tags:
+      - Table Orders
+      summary: Bon abschliessen
+      operationId: close
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          description: Bon abgeschlossen
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/TableOrderResponse"
+        "409":
+          description: Bon kann im aktuellen Zustand nicht abgeschlossen werden
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/TableOrderResponse"
+      security:
+      - bearerAuth: []
+  /api/table-orders/open:
+    post:
+      tags:
+      - Table Orders
+      summary: Neuen offenen Tischbon erstellen
+      operationId: open
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OpenTableOrderRequest"
+        required: true
+      responses:
+        "200":
+          description: Bon geoeffnet
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/TableOrderResponse"
+        "409":
+          description: Fuer den Tisch existiert bereits ein offener Bon
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/TableOrderResponse"
+      security:
+      - bearerAuth: []
+  /api/reservations:
+    get:
+      tags:
+      - Reservations
+      summary: Reservierungen fuer ein Datum listen
+      operationId: list_1
+      parameters:
+      - name: date
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date
+      responses:
+        "200":
+          description: Reservierungen geladen
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ReservationResponse"
+      security:
+      - bearerAuth: []
+    post:
+      tags:
+      - Reservations
+      summary: Reservierungsanfrage anlegen
+      description: Erstellt eine Reservierung im Status PENDING.
+      operationId: create_1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateReservationRequest"
+        required: true
+      responses:
+        "200":
+          description: Reservierung erstellt
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ReservationResponse"
+        "400":
+          description: Ungueltige Eingabe
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ReservationResponse"
+  /api/reservations/{id}/confirm:
+    post:
+      tags:
+      - Reservations
+      summary: Reservierungsanfrage bestaetigen
+      operationId: confirm
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          description: Reservierung bestaetigt
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ReservationResponse"
+        "404":
+          description: Reservierung nicht gefunden
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ReservationResponse"
+      security:
+      - bearerAuth: []
+  /api/reservations/{id}/complete:
+    post:
+      tags:
+      - Reservations
+      summary: Reservierungsbesuch abschliessen
+      description: Beendet den Besuch; normalerweise erfolgt dies durch Bezahlen oder
+        Archivieren aller Tischbons.
+      operationId: complete
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ReservationResponse"
+      security:
+      - bearerAuth: []
+  /api/reservations/{id}/check-in:
+    post:
+      tags:
+      - Reservations
+      summary: Reservierung einchecken
+      operationId: checkIn
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          description: Check-in erfolgt
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ReservationResponse"
+        "409":
+          description: Statuswechsel nicht erlaubt
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ReservationResponse"
+      security:
+      - bearerAuth: []
+  /api/reservations/{id}/cancel:
+    post:
+      tags:
+      - Reservations
+      summary: Reservierungsanfrage ablehnen
+      operationId: cancel
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReservationDecisionRequest"
+      responses:
+        "200":
+          description: Reservierung abgelehnt
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ReservationResponse"
+        "404":
+          description: Reservierung nicht gefunden
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ReservationResponse"
+      security:
+      - bearerAuth: []
+  /api/reservations/scan/{token}:
+    post:
+      tags:
+      - Reservations
+      summary: QR-Token scannen und Check-in-Faehigkeit pruefen
+      operationId: scan
+      parameters:
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Scan erfolgreich
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ReservationScanResponse"
+        "404":
+          description: Token ungueltig oder abgelaufen
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ReservationScanResponse"
+  /api/reorder/suppliers:
+    get:
+      tags:
+      - Reorder Orders
+      summary: Alle Lieferanten abrufen
+      operationId: getAllSuppliers
+      parameters:
+      - name: onlyActive
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: true
+      responses:
+        "200":
+          description: Lieferanten geladen
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SupplierResponse"
+      security:
+      - bearerAuth: []
+    post:
+      tags:
+      - Reorder Orders
+      summary: Neuen Lieferant erstellen
+      operationId: createSupplier
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SupplierRequest"
+        required: true
+      responses:
+        "200":
+          description: Lieferant erstellt
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/SupplierResponse"
+      security:
+      - bearerAuth: []
+  /api/reorder/orders:
+    post:
+      tags:
+      - Reorder Orders
+      summary: Neue Nachbestellung erstellen
+      operationId: createReorderOrder
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReorderOrderRequest"
+        required: true
+      responses:
+        "200":
+          description: Nachbestellung erstellt
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ReorderOrderResponse"
+        "404":
+          description: Artikel oder Lieferant nicht gefunden
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ReorderOrderResponse"
+      security:
+      - bearerAuth: []
+  /api/inventory:
+    get:
+      tags:
+      - Inventory
+      summary: Lagerartikel auflisten
+      operationId: list_2
+      responses:
+        "200":
+          description: Lagerliste geladen
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/InventoryItemResponse"
+      security:
+      - bearerAuth: []
+    post:
+      tags:
+      - Inventory
+      summary: Lagerartikel anlegen
+      operationId: create_2
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InventoryItemRequest"
+        required: true
+      responses:
+        "201":
+          description: Lagerartikel erstellt
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/InventoryItemResponse"
+        "400":
+          description: Ungueltige Eingabe
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/InventoryItemResponse"
+      security:
+      - bearerAuth: []
+  /api/inventory/{id}/calculate-reorder:
+    post:
+      tags:
+      - Inventory
+      summary: Nachbestellberechnung fuer Lagerartikel sofort ausfuehren
+      operationId: calculateReorder
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          description: Berechnung ausgefuehrt
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ReorderCalculationResponse"
+      security:
+      - bearerAuth: []
+  /api/inventory/{id}/adjust:
+    post:
+      tags:
+      - Inventory
+      summary: Lagerbestand manuell korrigieren
+      operationId: adjust
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: Idempotency-Key
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InventoryAdjustmentRequest"
+        required: true
+      responses:
+        "200":
+          description: Bestand angepasst
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/InventoryItemResponse"
+      security:
+      - bearerAuth: []
+  /api/inventory/configuration/manual-day-close:
+    post:
+      tags:
+      - Inventory
+      summary: Geschaeftstag manuell abschliessen
+      operationId: closeBusinessDayManually
+      responses:
+        "200":
+          description: Geschaeftstag abgeschlossen
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/SalesConfigurationResponse"
+      security:
+      - bearerAuth: []
+  /api/drinks:
+    get:
+      tags:
+      - Menu
+      summary: Getraenke auflisten
+      operationId: listDrinks
+      responses:
+        "200":
+          description: Getraenke geladen
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DrinkResponse"
+      security:
+      - bearerAuth: []
+    post:
+      tags:
+      - Menu
+      summary: Getraenk anlegen
+      operationId: createDrink
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DrinkRequest"
+        required: true
+      responses:
+        "201":
+          description: Getraenk erstellt
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/DrinkResponse"
+      security:
+      - bearerAuth: []
+  /api/drink-variants:
+    get:
+      tags:
+      - Menu
+      summary: Getraenkevarianten auflisten
+      operationId: listVariants
+      responses:
+        "200":
+          description: Varianten geladen
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DrinkVariantResponse"
+      security:
+      - bearerAuth: []
+    post:
+      tags:
+      - Menu
+      summary: Getraenkevariante anlegen
+      operationId: createVariant
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DrinkVariantRequest"
+        required: true
+      responses:
+        "201":
+          description: Variante erstellt
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/DrinkVariantResponse"
+      security:
+      - bearerAuth: []
+  /api/drink-categories:
+    get:
+      tags:
+      - Menu
+      summary: Getraenkekategorien auflisten
+      operationId: listCategories
+      responses:
+        "200":
+          description: Kategorien geladen
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DrinkCategoryResponse"
+      security:
+      - bearerAuth: []
+    post:
+      tags:
+      - Menu
+      summary: Getraenkekategorie anlegen
+      operationId: createCategory
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DrinkCategoryRequest"
+        required: true
+      responses:
+        "201":
+          description: Kategorie erstellt
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/DrinkCategoryResponse"
+      security:
+      - bearerAuth: []
+  /api/auth/refresh:
+    post:
+      tags:
+      - Authentication
+      summary: Access-Token mit Refresh-Token erneuern
+      operationId: refresh
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshTokenRequest"
+        required: true
+      responses:
+        "200":
+          description: Token erneuert
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "401":
+          description: Refresh-Token ungueltig
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+  /api/auth/logout:
+    post:
+      tags:
+      - Authentication
+      summary: Aktuelle Session ausloggen
+      operationId: logout
+      parameters:
+      - name: Authorization
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LogoutRequest"
+        required: true
+      responses:
+        "204":
+          description: Session ausgeloggt
+      security:
+      - bearerAuth: []
+  /api/auth/logout-all:
+    post:
+      tags:
+      - Authentication
+      summary: Alle Sessions des aktuellen Benutzers beenden
+      operationId: logoutAll
+      parameters:
+      - name: Authorization
+        in: header
+        required: false
+        schema:
+          type: string
+      responses:
+        "204":
+          description: Alle Sessions beendet
+      security:
+      - bearerAuth: []
+  /api/auth/login:
+    post:
+      tags:
+      - Authentication
+      summary: Benutzer einloggen
+      operationId: login
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+        required: true
+      responses:
+        "200":
+          description: Login erfolgreich
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "401":
+          description: Anmeldedaten ungueltig
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+  /api/table-orders/{id}:
+    get:
+      tags:
+      - Table Orders
+      summary: Bon per ID laden
+      operationId: getById_1
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          description: Bon gefunden
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/TableOrderResponse"
+        "404":
+          description: Bon nicht gefunden
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/TableOrderResponse"
+      security:
+      - bearerAuth: []
+  /api/table-orders/open/table/{tableId}:
+    get:
+      tags:
+      - Table Orders
+      summary: Aktuellen offenen Bon pro Tisch laden
+      operationId: getOpenByTable
+      parameters:
+      - name: tableId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          description: Offener Bon gefunden
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/TableOrderResponse"
+        "404":
+          description: Kein offener Bon vorhanden
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/TableOrderResponse"
+      security:
+      - bearerAuth: []
+  /api/table-orders/archive:
+    get:
+      tags:
+      - Table Orders
+      summary: Archivierte Bons durchsuchen
+      operationId: archive
+      parameters:
+      - name: date
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date
+      - name: query
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: payment
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ALL
+      responses:
+        "200":
+          description: Archivdaten geladen
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TableOrderResponse"
+      security:
+      - bearerAuth: []
+  /api/shift-settlements:
+    get:
+      tags:
+      - Shift Settlements
+      summary: Schichtabrechnungen fuer Datumsbereich abrufen
+      operationId: listByRange
+      parameters:
+      - name: from
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date
+      - name: to
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date
+      responses:
+        "200":
+          description: Schichtabrechnungen geladen
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ShiftSettlementResponse"
+      security:
+      - bearerAuth: []
+  /api/reservations/{id}/qr-code:
+    get:
+      tags:
+      - Reservations
+      summary: QR-Code fuer eine Reservierung als PNG laden
+      operationId: qrCode
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          description: QR-Code als PNG geliefert
+          content:
+            image/png:
+              schema:
+                type: string
+                format: byte
+        "404":
+          description: Reservierung nicht gefunden
+          content:
+            image/png:
+              schema:
+                type: string
+                format: byte
+      security:
+      - bearerAuth: []
+  /api/reservations/settings:
+    get:
+      tags:
+      - Reservations
+      summary: Oeffentliche Buchungsregeln und lokale Zeit laden
+      operationId: settings
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ReservationSettingsResponse"
+  /api/reports/revenue-overview:
+    get:
+      tags:
+      - Reports
+      summary: Umsatz- und Verbrauchsuebersicht laden
+      operationId: revenueOverview
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/RevenueOverviewResponse"
+      security:
+      - bearerAuth: []
+  /api/reports/reorder-list.pdf:
+    get:
+      tags:
+      - Reports
+      summary: Nachbestellliste als PDF exportieren
+      operationId: reorderListPdf
+      parameters:
+      - name: supplier
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: byte
+      security:
+      - bearerAuth: []
+  /api/reorder/orders/upcoming:
+    get:
+      tags:
+      - Reorder Orders
+      summary: Bevorstehende Lieferungen abrufen
+      operationId: getUpcomingDeliveries
+      responses:
+        "200":
+          description: Lieferungen geladen
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ReorderOrderResponse"
+      security:
+      - bearerAuth: []
+  /api/reorder/orders/inventory/{inventoryItemId}:
+    get:
+      tags:
+      - Reorder Orders
+      summary: Nachbestellungen fuer Lagerartikel abrufen
+      operationId: getReordersByInventoryItem
+      parameters:
+      - name: inventoryItemId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          description: Nachbestellungen geladen
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ReorderOrderResponse"
+      security:
+      - bearerAuth: []
+  /api/reorder/orders/by-date-range:
+    get:
+      tags:
+      - Reorder Orders
+      summary: Lieferungen nach Datumsbereich abrufen
+      operationId: getDeliveriesByDateRange
+      parameters:
+      - name: startDate
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date
+      - name: endDate
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date
+      responses:
+        "200":
+          description: Lieferungen geladen
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ReorderOrderResponse"
+      security:
+      - bearerAuth: []
+  /api/inventory/{id}/reorder-calculations/history:
+    get:
+      tags:
+      - Inventory
+      summary: Historie der Nachbestellberechnungen abrufen
+      operationId: getReorderCalculationHistory
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 10
+      responses:
+        "200":
+          description: Historie geladen
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ReorderCalculationResponse"
+      security:
+      - bearerAuth: []
+  /api/inventory/{id}/reorder-calculation:
+    get:
+      tags:
+      - Inventory
+      summary: Letzte Nachbestellberechnung fuer Lagerartikel abrufen
+      operationId: getLatestReorderCalculation
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          description: Berechnung geladen oder null bei fehlenden Daten
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ReorderCalculationResponse"
+        "404":
+          description: Lagerartikel nicht gefunden
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ReorderCalculationResponse"
+      security:
+      - bearerAuth: []
+  /api/inventory/sales/weekly/{variantId}:
+    get:
+      tags:
+      - Inventory
+      summary: Woechentliche Verkaufsaggregation fuer Variante abrufen
+      operationId: getWeeklySales
+      parameters:
+      - name: variantId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: weeks
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 4
+      responses:
+        "200":
+          description: Woechentliche Verkaufsdaten geladen
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DrinkSalesWeeklyResponse"
+      security:
+      - bearerAuth: []
+  /api/inventory/sales/daily:
+    get:
+      tags:
+      - Inventory
+      summary: Taegliche Verkaufsdaten fuer Zeitraum abrufen
+      operationId: getDailySales
+      parameters:
+      - name: startDate
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date
+      - name: endDate
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date
+      responses:
+        "200":
+          description: Taegliche Verkaufsdaten geladen
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DrinkSalesDailyResponse"
+      security:
+      - bearerAuth: []
+  /api/inventory/reorder-suggestions:
+    get:
+      tags:
+      - Inventory
+      summary: Nachbestellvorschlaege abrufen
+      operationId: reorderSuggestions
+      responses:
+        "200":
+          description: Nachbestellvorschlaege geladen
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ReorderSuggestionResponse"
+      security:
+      - bearerAuth: []
+  /api/inventory/reorder-calculations/below-threshold:
+    get:
+      tags:
+      - Inventory
+      summary: Artikel unter Schwellwert abrufen
+      operationId: getItemsBelowThreshold
+      responses:
+        "200":
+          description: Artikel unter Schwellwert geladen
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ReorderCalculationResponse"
+      security:
+      - bearerAuth: []
+  /api/inventory/movements:
+    get:
+      tags:
+      - Inventory
+      summary: Lagerbewegungen abrufen
+      operationId: movements
+      responses:
+        "200":
+          description: Bewegungen geladen
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/InventoryMovementResponse"
+      security:
+      - bearerAuth: []
+  /api/inventory/defaults:
+    get:
+      tags:
+      - Inventory
+      summary: Standardwerte pro Gebindeart abrufen
+      operationId: defaults
+      responses:
+        "200":
+          description: Standardwerte geladen
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/InventoryPackageDefaultsResponse"
+      security:
+      - bearerAuth: []
+  /api/auth/sessions:
+    get:
+      tags:
+      - Authentication
+      summary: Aktive Sessions des aktuellen Benutzers abrufen
+      operationId: sessions
+      parameters:
+      - name: X-Current-Refresh-Token
+        in: header
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Sessions geladen
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SessionResponse"
+      security:
+      - bearerAuth: []
+  /api/table-orders/{id}/items/{itemId}:
+    delete:
+      tags:
+      - Table Orders
+      summary: Position vom Bon entfernen
+      operationId: removeItem
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: itemId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          description: Position entfernt
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/TableOrderResponse"
+      security:
+      - bearerAuth: []
+  /api/auth/sessions/{id}:
+    delete:
+      tags:
+      - Authentication
+      summary: Eine Session des aktuellen Benutzers beenden
+      operationId: revokeSession
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "204":
+          description: Session beendet
+      security:
+      - bearerAuth: []
+components:
+  schemas:
+    VolumePriceUpdateRequest:
+      required:
+      - price
+      type: object
+      properties:
+        price:
+          minimum: 0.00
+          exclusiveMinimum: false
+          type: number
+      description: Volume Price Update Request contract
+    VolumePriceResponse:
+      required:
+      - id
+      - price
+      - volumeMl
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        volumeMl:
+          type: integer
+          format: int32
+        price:
+          type: number
+      description: Volume Price Response contract
+    TableRequest:
+      required:
+      - active
+      - name
+      - status
+      type: object
+      properties:
+        name:
+          minLength: 1
+          type: string
+        area:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum:
+          - FREE
+          - RESERVED
+          - OCCUPIED
+          - READY_FOR_PAYMENT
+        active:
+          type: boolean
+        seats:
+          minimum: 1
+          type: integer
+          format: int32
+          nullable: true
+      description: Table Request contract
+    TableResponse:
+      required:
+      - active
+      - area
+      - id
+      - name
+      - seats
+      - status
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        area:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum:
+          - FREE
+          - RESERVED
+          - OCCUPIED
+          - READY_FOR_PAYMENT
+        active:
+          type: boolean
+        seats:
+          type: integer
+          format: int32
+          nullable: true
+      description: Table Response contract
+    ShiftSettlementRequest:
+      required:
+      - openingCash
+      - otherExpenses
+      type: object
+      properties:
+        openingCash:
+          minimum: 0.00
+          exclusiveMinimum: false
+          type: number
+        otherExpenses:
+          minimum: 0.00
+          exclusiveMinimum: false
+          type: number
+        entries:
+          type: array
+          nullable: true
+          items:
+            $ref: "#/components/schemas/ShiftWorkerEntryRequest"
+      description: Shift Settlement Request contract
+    ShiftWorkerEntryRequest:
+      required:
+      - employeeName
+      - hourlyWage
+      - shiftEnd
+      - shiftStart
+      type: object
+      properties:
+        employeeName:
+          minLength: 1
+          type: string
+        shiftStart:
+          type: string
+        shiftEnd:
+          type: string
+        hourlyWage:
+          minimum: 0.00
+          exclusiveMinimum: false
+          type: number
+      description: Shift Worker Entry Request contract
+      nullable: true
+    ShiftSettlementResponse:
+      required:
+      - dailyRevenue
+      - entries
+      - expectedClosingCash
+      - id
+      - openingCash
+      - otherExpenses
+      - settlementDate
+      - totalWages
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          nullable: true
+        settlementDate:
+          type: string
+          format: date
+        openingCash:
+          type: number
+        otherExpenses:
+          type: number
+        dailyRevenue:
+          type: number
+        totalWages:
+          type: number
+        expectedClosingCash:
+          type: number
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/ShiftWorkerEntryResponse"
+      description: Shift Settlement Response contract
+    ShiftWorkerEntryResponse:
+      required:
+      - employeeName
+      - hourlyWage
+      - id
+      - shiftEnd
+      - shiftStart
+      - wageCost
+      - workedHours
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          nullable: true
+        employeeName:
+          type: string
+        shiftStart:
+          type: string
+        shiftEnd:
+          type: string
+        hourlyWage:
+          type: number
+        workedHours:
+          type: number
+        wageCost:
+          type: number
+      description: Shift Worker Entry Response contract
+    CreateReservationRequest:
+      required:
+      - guestCount
+      - guestName
+      - reservationDate
+      - reservationTime
+      type: object
+      properties:
+        guestName:
+          maxLength: 160
+          minLength: 0
+          type: string
+        contactEmail:
+          maxLength: 255
+          minLength: 0
+          type: string
+          format: email
+          nullable: true
+        contactPhone:
+          maxLength: 80
+          minLength: 0
+          type: string
+          nullable: true
+        reservationDate:
+          type: string
+          format: date
+        reservationTime:
+          type: string
+        guestCount:
+          minimum: 1
+          type: integer
+          format: int32
+      description: Create Reservation Request contract
+    ReservationResponse:
+      required:
+      - assignedTableIds
+      - businessDate
+      - checkedInAt
+      - contactEmail
+      - contactPhone
+      - durationMinutes
+      - endsAt
+      - expiresAt
+      - guestCount
+      - guestName
+      - id
+      - qrCodeToken
+      - qrScanUrl
+      - reservationDate
+      - reservationTime
+      - startsAt
+      - status
+      - timezone
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        guestName:
+          type: string
+        contactEmail:
+          type: string
+          nullable: true
+        contactPhone:
+          type: string
+          nullable: true
+        reservationDate:
+          type: string
+          format: date
+        reservationTime:
+          type: string
+        guestCount:
+          type: integer
+          format: int32
+        status:
+          type: string
+          enum:
+          - PENDING
+          - CONFIRMED
+          - CHECKED_IN
+          - REJECTED
+          - NO_SHOW
+          - EXPIRED
+          - CANCELLED
+          - COMPLETED
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        checkedInAt:
+          type: string
+          format: date-time
+          nullable: true
+        qrCodeToken:
+          type: string
+        qrScanUrl:
+          type: string
+        assignedTableIds:
+          type: array
+          items:
+            type: integer
+            format: int64
+        durationMinutes:
+          type: integer
+          format: int32
+          nullable: true
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
+          nullable: true
+        businessDate:
+          type: string
+          format: date
+        timezone:
+          type: string
+      description: Reservation Response contract
+    SupplierRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          nullable: true
+        contactEmail:
+          type: string
+          nullable: true
+        contactPhone:
+          type: string
+          nullable: true
+        website:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        active:
+          type: boolean
+          nullable: true
+      description: Supplier Request contract
+    SupplierResponse:
+      required:
+      - active
+      - contactEmail
+      - contactPhone
+      - id
+      - name
+      - notes
+      - website
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        contactEmail:
+          type: string
+        contactPhone:
+          type: string
+        website:
+          type: string
+        notes:
+          type: string
+        active:
+          type: boolean
+      description: Supplier Response contract
+    ReorderOrderResponse:
+      required:
+      - createdAt
+      - createdBy
+      - id
+      - inventoryItemId
+      - inventoryItemName
+      - notes
+      - orderedQuantity
+      - orderedUnit
+      - receivedAt
+      - receivedQuantity
+      - scheduledDeliveryDate
+      - scheduledDeliveryTime
+      - status
+      - supplierId
+      - supplierName
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        inventoryItemId:
+          type: integer
+          format: int64
+        inventoryItemName:
+          type: string
+        supplierId:
+          type: integer
+          format: int64
+        supplierName:
+          type: string
+        orderedQuantity:
+          type: number
+        orderedUnit:
+          type: string
+        scheduledDeliveryDate:
+          type: string
+          format: date
+        scheduledDeliveryTime:
+          type: string
+          nullable: true
+        status:
+          type: string
+        notes:
+          type: string
+          nullable: true
+        receivedQuantity:
+          type: number
+          nullable: true
+        receivedAt:
+          type: string
+          nullable: true
+        createdBy:
+          type: string
+        createdAt:
+          type: string
+      description: Reorder Order Response contract
+    InventoryItemRequest:
+      required:
+      - active
+      - contentPerPackage
+      - contentUnit
+      - minimumStock
+      - name
+      - packageType
+      - packagesInStock
+      - reorderThreshold
+      type: object
+      properties:
+        name:
+          minLength: 1
+          type: string
+        linkedDrinkId:
+          type: integer
+          format: int64
+          nullable: true
+        linkedDrinkVariantId:
+          type: integer
+          format: int64
+          nullable: true
+        packageType:
+          type: string
+          enum:
+          - BARREL
+          - CRATE
+          - BOTTLE
+          - BOX
+          - SINGLE_BOTTLE
+        packagesInStock:
+          minimum: 0.00
+          exclusiveMinimum: false
+          type: number
+        contentPerPackage:
+          minimum: 0.01
+          exclusiveMinimum: false
+          type: number
+        contentUnit:
+          type: string
+          enum:
+          - LITER
+          - MILLILITER
+          - PIECE
+        reorderThreshold:
+          minimum: 0.00
+          exclusiveMinimum: false
+          type: number
+        minimumStock:
+          minimum: 0.00
+          exclusiveMinimum: false
+          type: number
+        recommendedReorderAmount:
+          minimum: 0.00
+          exclusiveMinimum: false
+          type: number
+          nullable: true
+        reorderThresholdPackages:
+          minimum: 0.00
+          exclusiveMinimum: false
+          type: number
+          nullable: true
+        minimumStockPackages:
+          minimum: 0.00
+          exclusiveMinimum: false
+          type: number
+          nullable: true
+        recommendedReorderPackages:
+          minimum: 0.00
+          exclusiveMinimum: false
+          type: number
+          nullable: true
+        supplier:
+          type: string
+          nullable: true
+        active:
+          type: boolean
+      description: Inventory Item Request contract
+    InventoryItemResponse:
+      required:
+      - active
+      - contentPerPackage
+      - contentUnit
+      - id
+      - linkedDrinkId
+      - linkedDrinkVariantId
+      - minimumStock
+      - name
+      - packageType
+      - packagesInStock
+      - recommendedReorderAmount
+      - reorderThreshold
+      - supplier
+      - totalStockAmount
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        linkedDrinkId:
+          type: integer
+          format: int64
+          nullable: true
+        linkedDrinkVariantId:
+          type: integer
+          format: int64
+          nullable: true
+        packageType:
+          type: string
+          enum:
+          - BARREL
+          - CRATE
+          - BOTTLE
+          - BOX
+          - SINGLE_BOTTLE
+        packagesInStock:
+          type: number
+        contentPerPackage:
+          type: number
+        contentUnit:
+          type: string
+          enum:
+          - LITER
+          - MILLILITER
+          - PIECE
+        totalStockAmount:
+          type: number
+        reorderThreshold:
+          type: number
+        minimumStock:
+          type: number
+        recommendedReorderAmount:
+          type: number
+        supplier:
+          type: string
+          nullable: true
+        active:
+          type: boolean
+      description: Inventory Item Response contract
+    ConsumptionMetadataRequest:
+      type: object
+      properties:
+        leadTimeDays:
+          minimum: 0
+          type: integer
+          format: int32
+          nullable: true
+        safetyStockFactor:
+          minimum: 0.00
+          exclusiveMinimum: false
+          type: number
+          nullable: true
+        weeksLookback:
+          minimum: 1
+          type: integer
+          format: int32
+          nullable: true
+      description: Consumption Metadata Request contract
+    ConsumptionMetadataResponse:
+      required:
+      - id
+      - inventoryItemId
+      - leadTimeDays
+      - safetyStockFactor
+      - weeksLookback
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        inventoryItemId:
+          type: integer
+          format: int64
+        leadTimeDays:
+          type: integer
+          format: int32
+        safetyStockFactor:
+          type: number
+        weeksLookback:
+          type: integer
+          format: int32
+      description: Consumption Metadata Response contract
+    SalesConfigurationRequest:
+      type: object
+      properties:
+        weeksLookback:
+          minimum: 1
+          type: integer
+          format: int32
+          nullable: true
+        defaultSafetyFactor:
+          minimum: 0.00
+          exclusiveMinimum: false
+          type: number
+          nullable: true
+        defaultLeadTimeDays:
+          minimum: 0
+          type: integer
+          format: int32
+          nullable: true
+        businessTimezone:
+          type: string
+          nullable: true
+        businessDayEndsAt:
+          type: string
+          nullable: true
+        manualBusinessDate:
+          type: string
+          format: date
+          nullable: true
+      description: Sales Configuration Request contract
+    SalesConfigurationResponse:
+      required:
+      - businessDayEndsAt
+      - businessTimezone
+      - defaultLeadTimeDays
+      - defaultSafetyFactor
+      - effectiveBusinessDate
+      - manualBusinessDate
+      - weeksLookback
+      type: object
+      properties:
+        weeksLookback:
+          type: integer
+          format: int32
+        defaultSafetyFactor:
+          type: number
+        defaultLeadTimeDays:
+          type: integer
+          format: int32
+        businessTimezone:
+          type: string
+        businessDayEndsAt:
+          type: string
+        manualBusinessDate:
+          type: string
+          format: date
+          nullable: true
+        effectiveBusinessDate:
+          type: string
+          format: date
+      description: Sales Configuration Response contract
+    DrinkRequest:
+      required:
+      - active
+      - categoryId
+      - name
+      type: object
+      properties:
+        categoryId:
+          type: integer
+          format: int64
+        name:
+          minLength: 1
+          type: string
+        description:
+          type: string
+          nullable: true
+        imageUrl:
+          type: string
+          nullable: true
+        active:
+          type: boolean
+      description: Drink Request contract
+    DrinkResponse:
+      required:
+      - active
+      - categoryId
+      - categoryName
+      - description
+      - id
+      - imageUrl
+      - name
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        categoryId:
+          type: integer
+          format: int64
+        categoryName:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        imageUrl:
+          type: string
+          nullable: true
+        active:
+          type: boolean
+      description: Drink Response contract
+    DrinkVariantRequest:
+      required:
+      - active
+      - displayVolumeName
+      - drinkId
+      - volumeMl
+      type: object
+      properties:
+        drinkId:
+          type: integer
+          format: int64
+        displayVolumeName:
+          minLength: 1
+          type: string
+        volumeMl:
+          minimum: 1
+          type: integer
+          format: int32
+        price:
+          minimum: 0.00
+          exclusiveMinimum: false
+          type: number
+          nullable: true
+        useStandardPrice:
+          type: boolean
+          nullable: true
+        sku:
+          type: string
+          nullable: true
+        active:
+          type: boolean
+      description: Drink Variant Request contract
+    DrinkVariantResponse:
+      required:
+      - active
+      - displayVolumeName
+      - drinkId
+      - drinkName
+      - id
+      - price
+      - sku
+      - useStandardPrice
+      - volumeMl
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        drinkId:
+          type: integer
+          format: int64
+        drinkName:
+          type: string
+        displayVolumeName:
+          type: string
+        volumeMl:
+          type: integer
+          format: int32
+        price:
+          type: number
+        useStandardPrice:
+          type: boolean
+        sku:
+          type: string
+          nullable: true
+        active:
+          type: boolean
+      description: Drink Variant Response contract
+    DrinkCategoryRequest:
+      required:
+      - active
+      - name
+      - sortOrder
+      type: object
+      properties:
+        name:
+          minLength: 1
+          type: string
+        sortOrder:
+          minimum: 0
+          type: integer
+          format: int32
+        active:
+          type: boolean
+      description: Drink Category Request contract
+    DrinkCategoryResponse:
+      required:
+      - active
+      - id
+      - name
+      - sortOrder
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        sortOrder:
+          type: integer
+          format: int32
+        active:
+          type: boolean
+      description: Drink Category Response contract
+    VolumePriceRequest:
+      required:
+      - price
+      - volumeMl
+      type: object
+      properties:
+        volumeMl:
+          minimum: 1
+          type: integer
+          format: int32
+        price:
+          minimum: 0.00
+          exclusiveMinimum: false
+          type: number
+      description: Volume Price Request contract
+    SplitTableOrderItemRequest:
+      required:
+      - itemId
+      - quantity
+      type: object
+      properties:
+        itemId:
+          type: integer
+          format: int64
+        quantity:
+          minimum: 1
+          type: integer
+          format: int32
+      description: Split Table Order Item Request contract
+    SplitTableOrderPaymentRequest:
+      required:
+      - items
+      type: object
+      properties:
+        items:
+          minItems: 1
+          type: array
+          items:
+            $ref: "#/components/schemas/SplitTableOrderItemRequest"
+      description: Split Table Order Payment Request contract
+    SplitTableOrderPaymentResponse:
+      required:
+      - openOrder
+      - paidOrder
+      type: object
+      properties:
+        openOrder:
+          $ref: "#/components/schemas/TableOrderResponse"
+        paidOrder:
+          $ref: "#/components/schemas/TableOrderResponse"
+      description: Split Table Order Payment Response contract
+    TableOrderItemResponse:
+      required:
+      - deductedVolumeMl
+      - drinkLabel
+      - drinkVariantId
+      - id
+      - quantity
+      - totalPrice
+      - unitPrice
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        drinkVariantId:
+          type: integer
+          format: int64
+        drinkLabel:
+          type: string
+        quantity:
+          type: integer
+          format: int32
+        unitPrice:
+          type: number
+        totalPrice:
+          type: number
+        deductedVolumeMl:
+          type: number
+      description: Table Order Item Response contract
+    TableOrderResponse:
+      required:
+      - closedAt
+      - id
+      - items
+      - openedAt
+      - paid
+      - reservationId
+      - status
+      - tableId
+      - tableName
+      - total
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        tableId:
+          type: integer
+          format: int64
+        tableName:
+          type: string
+        reservationId:
+          type: integer
+          format: int64
+          nullable: true
+        status:
+          type: string
+          enum:
+          - OPEN
+          - CLOSED
+        paid:
+          type: boolean
+        openedAt:
+          type: string
+          format: date-time
+        closedAt:
+          type: string
+          format: date-time
+          nullable: true
+        total:
+          type: number
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/TableOrderItemResponse"
+      description: Table Order Response contract
+    AddTableOrderItemRequest:
+      required:
+      - drinkVariantId
+      - quantity
+      type: object
+      properties:
+        drinkVariantId:
+          type: integer
+          format: int64
+        quantity:
+          minimum: 1
+          type: integer
+          format: int32
+      description: Add Table Order Item Request contract
+    OpenTableOrderRequest:
+      required:
+      - tableId
+      type: object
+      properties:
+        tableId:
+          type: integer
+          format: int64
+        reservationId:
+          type: integer
+          format: int64
+          nullable: true
+      description: Open Table Order Request contract
+    ReservationDecisionRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          nullable: true
+      description: Reservation Decision Request contract
+    ReservationScanResponse:
+      required:
+      - checkInAllowed
+      - guestName
+      - reservationDate
+      - reservationId
+      - reservationTime
+      - status
+      type: object
+      properties:
+        reservationId:
+          type: integer
+          format: int64
+        guestName:
+          type: string
+        reservationDate:
+          type: string
+          format: date
+        reservationTime:
+          type: string
+        status:
+          type: string
+          enum:
+          - PENDING
+          - CONFIRMED
+          - CHECKED_IN
+          - REJECTED
+          - NO_SHOW
+          - EXPIRED
+          - CANCELLED
+          - COMPLETED
+        checkInAllowed:
+          type: boolean
+      description: Reservation Scan Response contract
+    ReorderOrderRequest:
+      required:
+      - inventoryItemId
+      - orderedQuantity
+      - orderedUnit
+      - scheduledDeliveryDate
+      - supplierId
+      type: object
+      properties:
+        inventoryItemId:
+          type: integer
+          format: int64
+        supplierId:
+          type: integer
+          format: int64
+        orderedQuantity:
+          type: number
+        orderedUnit:
+          minLength: 1
+          type: string
+        scheduledDeliveryDate:
+          type: string
+          format: date
+        scheduledDeliveryTime:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+      description: Reorder Order Request contract
+    ReorderCalculationResponse:
+      required:
+      - calculationDate
+      - currentStockAmount
+      - id
+      - inventoryItemId
+      - inventoryItemName
+      - isBelowThreshold
+      - recommendedReorderAmount
+      - weeklyAverageConsumption
+      - weeksUntilStockout
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        inventoryItemId:
+          type: integer
+          format: int64
+        inventoryItemName:
+          type: string
+        calculationDate:
+          type: string
+          format: date-time
+        currentStockAmount:
+          type: number
+        weeklyAverageConsumption:
+          type: number
+        recommendedReorderAmount:
+          type: number
+        isBelowThreshold:
+          type: boolean
+        weeksUntilStockout:
+          type: number
+          nullable: true
+      description: Reorder Calculation Response contract
+    InventoryAdjustmentRequest:
+      required:
+      - amount
+      - increase
+      - reason
+      type: object
+      properties:
+        amount:
+          minimum: 0.01
+          exclusiveMinimum: false
+          type: number
+        reason:
+          minLength: 1
+          type: string
+        increase:
+          type: boolean
+      description: Inventory Adjustment Request contract
+    RefreshTokenRequest:
+      required:
+      - refreshToken
+      type: object
+      properties:
+        refreshToken:
+          minLength: 1
+          type: string
+      description: Refresh Token Request contract
+    LoginResponse:
+      required:
+      - accessExpiresInSeconds
+      - accessToken
+      - displayName
+      - refreshExpiresInSeconds
+      - refreshToken
+      - role
+      - tokenType
+      type: object
+      properties:
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+        tokenType:
+          type: string
+        accessExpiresInSeconds:
+          type: integer
+          format: int64
+        refreshExpiresInSeconds:
+          type: integer
+          format: int64
+        role:
+          type: string
+        displayName:
+          type: string
+      description: Login Response contract
+    LogoutRequest:
+      required:
+      - refreshToken
+      type: object
+      properties:
+        refreshToken:
+          minLength: 1
+          type: string
+      description: Logout Request contract
+    LoginRequest:
+      required:
+      - email
+      - password
+      type: object
+      properties:
+        email:
+          minLength: 1
+          type: string
+          format: email
+        password:
+          minLength: 1
+          type: string
+      description: Login Request contract
+    OpeningHoursResponse:
+      required:
+      - from
+      - open
+      - secondFrom
+      - secondTo
+      - to
+      - weekday
+      type: object
+      properties:
+        weekday:
+          type: string
+          enum:
+          - MONDAY
+          - TUESDAY
+          - WEDNESDAY
+          - THURSDAY
+          - FRIDAY
+          - SATURDAY
+          - SUNDAY
+        open:
+          type: boolean
+        from:
+          type: string
+          nullable: true
+        to:
+          type: string
+          nullable: true
+        secondFrom:
+          type: string
+          nullable: true
+        secondTo:
+          type: string
+          nullable: true
+      description: Opening window for one weekday; secondFrom/secondTo describe an
+        optional split window
+    ReservationSettingsResponse:
+      required:
+      - durationMinutes
+      - graceMinutes
+      - intervalMinutes
+      - mode
+      - openingHours
+      - timezone
+      - today
+      type: object
+      properties:
+        today:
+          type: string
+          format: date
+        timezone:
+          type: string
+          example: Europe/Berlin
+        durationMinutes:
+          type: integer
+          description: Reserved for bounded stays; null because checked-in tables
+            remain occupied until checkout or archive
+          format: int32
+          nullable: true
+        graceMinutes:
+          type: integer
+          description: Minutes after arrival before an unattended reservation becomes
+            a no-show
+          format: int32
+        intervalMinutes:
+          type: integer
+          format: int32
+        mode:
+          type: string
+          enum:
+          - FIXED
+          - FLEXIBLE
+        openingHours:
+          type: array
+          items:
+            $ref: "#/components/schemas/OpeningHoursResponse"
+      description: "Public reservation clock, no-show grace, interval mode and opening\
+        \ windows"
+    RevenueDayPointResponse:
+      required:
+      - label
+      - revenue
+      type: object
+      properties:
+        label:
+          type: string
+        revenue:
+          type: number
+      description: Revenue Day Point Response contract
+    RevenueOverviewResponse:
+      required:
+      - dayConsumedMl
+      - dayRevenue
+      - monthConsumedMl
+      - monthPoints
+      - monthRevenue
+      - strongestWeekday
+      - weekConsumedMl
+      - weekPoints
+      - weekRevenue
+      type: object
+      properties:
+        dayRevenue:
+          type: number
+        weekRevenue:
+          type: number
+        monthRevenue:
+          type: number
+        dayConsumedMl:
+          type: number
+        weekConsumedMl:
+          type: number
+        monthConsumedMl:
+          type: number
+        strongestWeekday:
+          type: string
+        weekPoints:
+          type: array
+          items:
+            $ref: "#/components/schemas/RevenueDayPointResponse"
+        monthPoints:
+          type: array
+          items:
+            $ref: "#/components/schemas/RevenueDayPointResponse"
+      description: Revenue Overview Response contract
+    DrinkSalesWeeklyResponse:
+      required:
+      - averageDailyQuantity
+      - averageDailyVolumeMl
+      - drinkId
+      - drinkName
+      - drinkVariantId
+      - drinkVariantName
+      - id
+      - quantitySold
+      - volumeSoldMl
+      - weekStartDate
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        drinkId:
+          type: integer
+          format: int64
+        drinkName:
+          type: string
+        drinkVariantId:
+          type: integer
+          format: int64
+          nullable: true
+        drinkVariantName:
+          type: string
+          nullable: true
+        weekStartDate:
+          type: string
+          format: date
+        quantitySold:
+          type: number
+        volumeSoldMl:
+          type: number
+        averageDailyQuantity:
+          type: number
+        averageDailyVolumeMl:
+          type: number
+      description: Drink Sales Weekly Response contract
+    DrinkSalesDailyResponse:
+      required:
+      - drinkId
+      - drinkName
+      - drinkVariantId
+      - drinkVariantName
+      - id
+      - quantitySold
+      - saleDate
+      - volumeSoldMl
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        drinkId:
+          type: integer
+          format: int64
+        drinkName:
+          type: string
+        drinkVariantId:
+          type: integer
+          format: int64
+          nullable: true
+        drinkVariantName:
+          type: string
+          nullable: true
+        saleDate:
+          type: string
+          format: date
+        quantitySold:
+          type: number
+        volumeSoldMl:
+          type: number
+      description: Drink Sales Daily Response contract
+    ReorderSuggestionResponse:
+      required:
+      - contentUnit
+      - currentStock
+      - inventoryItemId
+      - inventoryItemName
+      - minimumStock
+      - packageSize
+      - packageType
+      - recommendedOrderAmount
+      - recommendedOrderPackages
+      - supplier
+      - threshold
+      type: object
+      properties:
+        inventoryItemId:
+          type: integer
+          format: int64
+        inventoryItemName:
+          type: string
+        currentStock:
+          type: number
+        threshold:
+          type: number
+        minimumStock:
+          type: number
+        recommendedOrderAmount:
+          type: number
+        recommendedOrderPackages:
+          type: number
+        packageSize:
+          type: number
+        packageType:
+          type: string
+          enum:
+          - BARREL
+          - CRATE
+          - BOTTLE
+          - BOX
+          - SINGLE_BOTTLE
+        contentUnit:
+          type: string
+          enum:
+          - LITER
+          - MILLILITER
+          - PIECE
+        supplier:
+          type: string
+          nullable: true
+      description: Reorder Suggestion Response contract
+    InventoryMovementResponse:
+      required:
+      - amount
+      - createdAt
+      - createdBy
+      - id
+      - inventoryItemId
+      - inventoryItemName
+      - movementType
+      - reason
+      - referenceId
+      - referenceType
+      - unit
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        inventoryItemId:
+          type: integer
+          format: int64
+        inventoryItemName:
+          type: string
+        movementType:
+          type: string
+          enum:
+          - SALE
+          - ADJUSTMENT
+          - LOSS
+          - BREAKAGE
+          - INVENTORY_COUNT
+        amount:
+          type: number
+        unit:
+          type: string
+          enum:
+          - LITER
+          - MILLILITER
+          - PIECE
+        reason:
+          type: string
+        referenceType:
+          type: string
+          nullable: true
+          enum:
+          - TABLE_ORDER
+          - TABLE_ORDER_ITEM
+          - MANUAL
+        referenceId:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        createdBy:
+          type: string
+          nullable: true
+      description: Inventory Movement Response contract
+    InventoryPackageDefaultsResponse:
+      required:
+      - minimumStockPackages
+      - packageType
+      - recommendedReorderPackages
+      - reorderThresholdPackages
+      type: object
+      properties:
+        packageType:
+          type: string
+          enum:
+          - BARREL
+          - CRATE
+          - BOTTLE
+          - BOX
+          - SINGLE_BOTTLE
+        reorderThresholdPackages:
+          type: number
+        minimumStockPackages:
+          type: number
+        recommendedReorderPackages:
+          type: number
+      description: Inventory Package Defaults Response contract
+    SessionResponse:
+      required:
+      - createdAt
+      - current
+      - expiresAt
+      - id
+      - ipAddress
+      - lastUsedAt
+      - tokenId
+      - userAgent
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        tokenId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        lastUsedAt:
+          type: string
+          format: date-time
+          nullable: true
+        userAgent:
+          type: string
+          nullable: true
+        ipAddress:
+          type: string
+          nullable: true
+        current:
+          type: boolean
+      description: Session Response contract
+  securitySchemes:
+    bearerAuth:
+      type: http
+      in: header
+      scheme: bearer
+      bearerFormat: JWT
