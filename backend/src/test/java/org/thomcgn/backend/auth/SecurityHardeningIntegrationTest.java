@@ -76,7 +76,7 @@ class SecurityHardeningIntegrationTest extends PostgresIntegrationTest {
             "POST|/api/reorder/orders|400",
             "PUT|/api/reorder/orders/999999/status?status=PENDING|404",
             "POST|/api/inventory/999999/calculate-reorder|404",
-            "POST|/api/inventory/configuration/manual-day-close|200",
+            "POST|/api/inventory/configuration/manual-day-close|400",
             "PUT|/api/inventory/configuration|400",
             "GET|/api/volume-prices|200",
             "GET|/actuator/metrics|200"

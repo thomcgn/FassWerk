@@ -70,24 +70,27 @@ public class TableOrderController {
             @ApiResponse(responseCode = "200", description = "Bon abgeschlossen"),
             @ApiResponse(responseCode = "409", description = "Bon kann im aktuellen Zustand nicht abgeschlossen werden")
     })
-    public TableOrderResponse close(@PathVariable Long id) {
-        return tableOrderService.close(id);
+    public TableOrderResponse close(@PathVariable Long id,
+            @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey) {
+        return tableOrderService.close(id, idempotencyKey);
     }
 
     @PostMapping("/{id}/mark-unpaid")
     @Operation(summary = "Bon als unbezahlt markieren")
     @SecurityRequirement(name = "bearerAuth")
     @ApiResponse(responseCode = "200", description = "Bon auf unbezahlt gesetzt")
-    public TableOrderResponse markUnpaid(@PathVariable Long id) {
-        return tableOrderService.markUnpaid(id);
+    public TableOrderResponse markUnpaid(@PathVariable Long id,
+            @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey) {
+        return tableOrderService.markUnpaid(id, idempotencyKey);
     }
 
     @PostMapping("/{id}/reopen-unpaid")
     @Operation(summary = "Unbezahlten Bon wieder oeffnen")
     @SecurityRequirement(name = "bearerAuth")
     @ApiResponse(responseCode = "200", description = "Bon wieder geoeffnet")
-    public TableOrderResponse reopenUnpaid(@PathVariable Long id) {
-        return tableOrderService.reopenUnpaid(id);
+    public TableOrderResponse reopenUnpaid(@PathVariable Long id,
+            @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey) {
+        return tableOrderService.reopenUnpaid(id, idempotencyKey);
     }
 
     @PostMapping("/{id}/split-payment")

@@ -119,3 +119,13 @@ eigene temporäre Dienste: zwei BFFs, Backend und PostgreSQL. Geprüft werden ec
 Fachaktionen, Antwortverlust, Neustart und ein synthetischer Dump/Restore.
 `./scripts/audit-preflight.sql` enthält ausschließlich lesende Prüfungen für eine
 separate V25+-Restore-Kopie; echte Produktionshistorien müssen zusätzlich geprüft werden.
+
+### Production-Roadmap: Request-Idempotenz (Phase 1)
+
+V29 ergänzt persistente Tagesabschluss-Belege; bestehende Migrationen und Sessions
+bleiben unverändert. Der manuelle Tagesabschluss benötigt jetzt einen stabilen
+`Idempotency-Key` und JSON mit `expectedBusinessDate`. Alte Clients ohne diese
+Angaben erhalten 400; Backend und BFF/Frontend gemeinsam aktualisieren.
+Bon-Abschluss, Zurückstellen und Wiederöffnung unterstützen ebenfalls den
+Idempotenzheader. Details, Wiederholungsverhalten und Prüfungen:
+[Phase-1-Bericht](../docs/production/PHASE_1_REPORT.md).

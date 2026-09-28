@@ -44,4 +44,5 @@ export type ReorderCalculation = ApiSchema<"ReorderCalculationResponse">;
 export type ReorderSuggestion = ApiSchema<"ReorderSuggestionResponse">;
 export type ConsumptionMetadata = ApiSchema<"ConsumptionMetadataResponse">;
 export type ConsumptionMetadataRequest = ApiSchema<"ConsumptionMetadataRequest">;
+export type ManualDayCloseRequest = ApiSchema<"ManualDayCloseRequest">;
 export type SalesConfiguration = ApiSchema<"SalesConfigurationResponse">;

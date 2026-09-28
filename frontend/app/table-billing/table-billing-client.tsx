@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { usePendingMutation } from "@/lib/use-pending-mutation";
+import type { MutationCommand } from "@/lib/pending-mutation";
+import { PendingMutationNotice } from "@/components/pending-mutation-notice";
 import { Receipt } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { TableCapacityEditor } from "@/components/table-capacity-editor";
@@ -12,7 +15,7 @@ import { TableDetailModal } from "@/components/table-detail-modal";
 import { useToastFeedback } from "@/lib/use-toast-feedback";
 import { parseJsonResponse, readApiError } from "@/lib/api-client";
 import {
-  matchesBusinessDate, parseDrinkCategories, parseDrinks, parseDrinkVariants, parseInventoryItems,
+  parseDrinkCategories, parseDrinks, parseDrinkVariants, parseInventoryItems,
   parseSplitPayment, parseTable, parseTableOrder, parseTableOrders, parseTables, readCachedOrders,
   selectSellableCatalog, sortByClosedAtDesc, tableStatusVariant, todayIsoDate, toCurrency, toGermanDateLabel,
 } from "@/features/billing/model";
@@ -25,6 +28,7 @@ const BUSINESS_DATE_STORAGE_KEY = "table-billing-business-date";
 
 export default function TableBillingClient() {
   const router = useRouter();
+  const mutation = usePendingMutation("billing-pending-command-v1");
   const [state, setState] = useState<LoadState>("loading");
   const [tables, setTables] = useState<Table[]>([]);
   const [categories, setCategories] = useState<DrinkCategory[]>([]);
@@ -163,6 +167,7 @@ export default function TableBillingClient() {
   }, [loadUnpaidArchive, loadMeta]);
 
   async function openOrLoadTable(table: Table) {
+    if (mutation.blocked) { setError("Bitte zuerst die offene Aktion wiederholen."); return; }
     setError(null);
     setStatus(null);
     setSelectedTableId(String(table.id));
@@ -216,149 +221,60 @@ export default function TableBillingClient() {
     setStatus(`Bon #${payload.id} geladen.`);
   }
 
-  async function addItem(drinkVariantId: number, quantity: number) {
-    if (!order) return;
+  async function runBillingCommand(command?: MutationCommand) {
     setError(null);
     setStatus(null);
-    const response = await fetch(`/api/table-orders/${order.id}/items`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() },
-      body: JSON.stringify({ drinkVariantId, quantity }),
-    });
-    if (!response.ok) {
-      setError(await readApiError(response, "Position konnte nicht hinzugefügt werden."));
-      return;
-    }
-    const payload = await parseJsonResponse(response, parseTableOrder, "Bon verarbeiten");
-    setOrder(payload);
-    setStatus(`${quantity}x Position hinzugefügt.`);
-  }
-
-  async function removeItem(itemId: number) {
-    if (!order) return;
-    setError(null);
-    setStatus(null);
-    const response = await fetch(`/api/table-orders/${order.id}/items/${itemId}`, { method: "DELETE", headers: { "Idempotency-Key": crypto.randomUUID() } });
-    if (!response.ok) {
-      setError("Position konnte nicht entfernt werden.");
-      return;
-    }
-    const payload = await parseJsonResponse(response, parseTableOrder, "Bon verarbeiten");
-    setOrder(payload);
-    setStatus("Position entfernt.");
-  }
-
-  async function closeOrder() {
-    if (!order) return;
-    setError(null);
-    setStatus(null);
-    const response = await fetch(`/api/table-orders/${order.id}/close`, { method: "POST" });
-    if (!response.ok) {
-      setError("Bezahlung konnte nicht abgeschlossen werden.");
-      return;
-    }
-    const payload = await parseJsonResponse(response, parseTableOrder, "Bon verarbeiten");
-    setOrder(null);
-    setSelectedTableId("");
-    setStatus(`Bon #${payload.id} bezahlt. Betrag ${toCurrency(payload.total)} wurde in die Umsatzauswertung uebernommen.`);
-    setIsModalOpen(false);
-    await loadMeta();
-    await loadUnpaidArchive(businessDate);
-  }
-
-  async function markOrderUnpaid() {
-    if (!order) return;
-    setError(null);
-    setStatus(null);
-
-    const response = await fetch(`/api/table-orders/${order.id}/mark-unpaid`, { method: "POST" });
-    if (!response.ok) {
-      setError(await readApiError(response, "Bon konnte nicht zurückgestellt werden."));
-      return;
-    }
-
-    const payload = await parseJsonResponse(response, parseTableOrder, "Bon verarbeiten");
-    if (matchesBusinessDate(payload.closedAt, businessDate)) {
-      setUnpaidArchive((current) => [payload, ...current.filter((entry) => entry.id !== payload.id)]);
-    }
-    setOrder(null);
-    setSelectedTableId("");
-    setStatus(`Bon #${payload.id} als unbezahlt zurückgestellt und ins Archiv verschoben.`);
-    setIsModalOpen(false);
-    await loadMeta();
-    await loadUnpaidArchive(businessDate);
-  }
-
-  async function reopenUnpaidOrder() {
-    if (!order) return;
-    setError(null);
-    setStatus(null);
-
-    const response = await fetch(`/api/table-orders/${order.id}/reopen-unpaid`, { method: "POST" });
-    if (!response.ok) {
-      setError(await readApiError(response, "Bon konnte nicht wieder geoeffnet werden."));
-      return;
-    }
-
-    const payload = await parseJsonResponse(response, parseTableOrder, "Bon verarbeiten");
-    setOrder(payload);
-    setSelectedTableId(String(payload.tableId));
-    setStatus(`Bon #${payload.id} wurde wieder geoeffnet und kann jetzt bezahlt werden.`);
-    await loadMeta();
-    await loadUnpaidArchive(businessDate);
-  }
-
-  async function reopenUnpaidOrderById(orderId: number) {
-    setError(null);
-    setStatus(null);
-
-    const response = await fetch(`/api/table-orders/${orderId}/reopen-unpaid`, { method: "POST" });
-    if (!response.ok) {
-      setError(await readApiError(response, "Bon konnte nicht wieder geoeffnet werden."));
-      return;
-    }
-
-    const payload = await parseJsonResponse(response, parseTableOrder, "Bon verarbeiten");
-    setOrder(payload);
-    setOrderLookupId(String(payload.id));
-    setSelectedTableId(String(payload.tableId));
-    setIsModalOpen(true);
-    setStatus(`Bon #${payload.id} wurde aus dem Archiv wieder geoeffnet.`);
-    await loadMeta();
-    await loadUnpaidArchive(businessDate);
-  }
-
-  async function splitPayment(items: SplitPaymentItemRequest[]) {
-    if (!order) return;
-    if (items.length === 0) {
-      setError("Bitte mindestens eine Position für die Teilzahlung auswählen.");
-      return;
-    }
-
-    setError(null);
-    setStatus(null);
-    const response = await fetch(`/api/table-orders/${order.id}/split-payment`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() },
-      body: JSON.stringify({ items }),
-    });
-
-    if (!response.ok) {
-      setError(await readApiError(response, "Teilzahlung konnte nicht durchgeführt werden."));
-      return;
-    }
-
-    const payload = await parseJsonResponse(response, parseSplitPayment, "Teilzahlung");
-    setOrder(payload.openOrder);
-    setStatus(`Teilzahlung als Bon #${payload.paidOrder.id} erfasst: ${toCurrency(payload.paidOrder.total)}.`);
-
-    if (payload.openOrder.status !== "OPEN") {
-      setOrder(null);
-      setSelectedTableId("");
-      setIsModalOpen(false);
+    try {
+      const result = await mutation.run(command, async (response, sent) => {
+        if (sent.url.endsWith("/split-payment")) {
+          const split = await parseJsonResponse(response, parseSplitPayment, "Teilzahlung");
+          return { current: split.openOrder, paid: split.paidOrder };
+        }
+        return { current: await parseJsonResponse(response, parseTableOrder, "Bon verarbeiten"), paid: null };
+      });
+      if (!result) return;
+      const { current, paid } = result.value;
+      setOrderLookupId(String(current.id));
+      setOrder(current.status === "OPEN" ? current : null);
+      setSelectedTableId(current.status === "OPEN" ? String(current.tableId) : "");
+      setIsModalOpen(current.status === "OPEN");
+      setStatus(paid
+        ? `Teilzahlung als Bon #${paid.id} erfasst: ${toCurrency(paid.total)}.`
+        : `${result.command.label} bestätigt. Bon #${current.id}: ${current.status === "OPEN" ? "offen" : current.paid ? "bezahlt" : "unbezahlt archiviert"}.`);
       await loadMeta();
       await loadUnpaidArchive(businessDate);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Aktion konnte nicht bestätigt werden.");
     }
+  }
+
+  async function addItem(drinkVariantId: number, quantity: number) {
+    if (!order) return;
+    await runBillingCommand({ url: `/api/table-orders/${order.id}/items`, method: "POST",
+      body: JSON.stringify({ drinkVariantId, quantity }), label: `${quantity}x Position hinzufügen · Bon #${order.id}` });
+  }
+  async function removeItem(itemId: number) {
+    if (!order) return;
+    await runBillingCommand({ url: `/api/table-orders/${order.id}/items/${itemId}`, method: "DELETE", label: `Position entfernen · Bon #${order.id}` });
+  }
+  async function closeOrder() {
+    if (!order) return;
+    await runBillingCommand({ url: `/api/table-orders/${order.id}/close`, method: "POST", label: `Bezahlung · Bon #${order.id}` });
+  }
+  async function markOrderUnpaid() {
+    if (!order) return;
+    await runBillingCommand({ url: `/api/table-orders/${order.id}/mark-unpaid`, method: "POST", label: `Zurückstellen · Bon #${order.id}` });
+  }
+  async function reopenUnpaidOrder() {
+    if (order) await reopenUnpaidOrderById(order.id);
+  }
+  async function reopenUnpaidOrderById(orderId: number) {
+    await runBillingCommand({ url: `/api/table-orders/${orderId}/reopen-unpaid`, method: "POST", label: `Wieder öffnen · Bon #${orderId}` });
+  }
+  async function splitPayment(items: SplitPaymentItemRequest[]) {
+    if (!order || items.length === 0) return;
+    await runBillingCommand({ url: `/api/table-orders/${order.id}/split-payment`, method: "POST",
+      body: JSON.stringify({ items: [...items].sort((a, b) => a.itemId - b.itemId) }), label: `Teilzahlung · Bon #${order.id}` });
   }
 
   async function createTable() {
@@ -495,7 +411,7 @@ export default function TableBillingClient() {
                     <Button variant="outline" size="sm" onClick={() => void fetchOrderById(String(entry.id))}>
                       Bon #{entry.id} laden
                     </Button>
-                    <Button size="sm" onClick={() => void reopenUnpaidOrderById(entry.id)}>
+                    <Button size="sm" disabled={mutation.blocked} onClick={() => void reopenUnpaidOrderById(entry.id)}>
                       Wieder oeffnen
                     </Button>
                   </div>
@@ -568,7 +484,12 @@ export default function TableBillingClient() {
         </CardContent>
       </Card>
 
+      {!isModalOpen && <PendingMutationNotice label={mutation.pending?.label} busy={mutation.busy}
+        error={mutation.initializationError} onRetry={() => void runBillingCommand()} />}
       <TableDetailModal
+        mutationBlocked={mutation.blocked}
+        recovery={<PendingMutationNotice label={mutation.pending?.label} busy={mutation.busy}
+          error={mutation.initializationError} onRetry={() => void runBillingCommand()} />}
         isOpen={isModalOpen}
         order={order}
         categories={categories}

@@ -51,6 +51,60 @@ class BillingInventoryPhase8IntegrationTest extends PostgresIntegrationTest {
     }
 
     @Test
+    void delayedStateRetriesCannotUndoLaterArchiveOrReopen() {
+        var order = orders.open(new OpenTableOrderRequest(1L, null));
+        orders.markUnpaid(order.id(), "phase1-archive-a");
+        orders.reopenUnpaid(order.id(), "phase1-reopen-a");
+        assertThat(orders.markUnpaid(order.id(), "phase1-archive-a").status()).isEqualTo(org.thomcgn.backend.billing.domain.TableOrderStatus.OPEN);
+        orders.markUnpaid(order.id(), "phase1-archive-b");
+        assertThat(orders.reopenUnpaid(order.id(), "phase1-reopen-a").status()).isEqualTo(org.thomcgn.backend.billing.domain.TableOrderStatus.CLOSED);
+        assertThatThrownBy(() -> orders.reopenUnpaid(order.id(), "phase1-archive-a")).isInstanceOf(ConflictException.class);
+        orders.reopenUnpaid(order.id(), "phase1-reopen-b");
+        orders.close(order.id(), "phase1-close");
+        assertThat(orders.close(order.id(), "phase1-close").paid()).isTrue();
+        assertThat(jdbc.queryForObject("select count(*) from billing_operations where operation_key='phase1-close'", Integer.class)).isEqualTo(1);
+    }
+
+    @Test
+    void concurrentDayCloseAndOldReplayCannotAdvanceANewerDay() throws Exception {
+        var previous = businessSettings.getConfiguration();
+        var date = java.time.LocalDate.of(2036, 6, 1);
+        var key = java.util.UUID.randomUUID().toString();
+        try {
+            jdbc.update("update inventory_business_settings set manual_business_date=?", date);
+            var first = java.util.concurrent.CompletableFuture.runAsync(() -> businessSettings.closeBusinessDayManually(date, key));
+            var second = java.util.concurrent.CompletableFuture.runAsync(() -> businessSettings.closeBusinessDayManually(date, key));
+            first.get(); second.get();
+            assertThat(businessSettings.getCurrentBusinessDate()).isEqualTo(date.plusDays(1));
+            assertThatThrownBy(() -> businessSettings.closeBusinessDayManually(date, "phase1-stale-other-device")).isInstanceOf(ConflictException.class);
+            assertThatThrownBy(() -> businessSettings.closeBusinessDayManually(date.plusDays(1), key)).isInstanceOf(ConflictException.class);
+            businessSettings.closeBusinessDayManually(date.plusDays(1), java.util.UUID.randomUUID().toString());
+            businessSettings.closeBusinessDayManually(date, key);
+            assertThat(businessSettings.getCurrentBusinessDate()).isEqualTo(date.plusDays(2));
+            jdbc.update("update inventory_business_settings set manual_business_date=?", date);
+            businessSettings.closeBusinessDayManually(date, key);
+            assertThat(businessSettings.getCurrentBusinessDate()).isEqualTo(date);
+        } finally { businessSettings.updateConfiguration(previous); }
+    }
+
+    @Test
+    void dayCloseOperationFailureRollsBackDate() {
+        var previous = businessSettings.getConfiguration();
+        var date = java.time.LocalDate.of(2036, 7, 1);
+        jdbc.execute("alter table business_day_close_operations add constraint phase1_failure check(operation_key <> 'phase1-failing-close')");
+        try {
+            jdbc.update("update inventory_business_settings set manual_business_date=?", date);
+            assertThatThrownBy(() -> businessSettings.closeBusinessDayManually(date, "phase1-failing-close"))
+                    .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+            assertThat(businessSettings.getCurrentBusinessDate()).isEqualTo(date);
+            assertThat(jdbc.queryForObject("select count(*) from business_day_close_operations where operation_key='phase1-failing-close'", Integer.class)).isZero();
+        } finally {
+            jdbc.execute("alter table business_day_close_operations drop constraint phase1_failure");
+            businessSettings.updateConfiguration(previous);
+        }
+    }
+
+    @Test
     void closureUsesSameManualBusinessDateInReportShiftAndArchive() {
         var previous = businessSettings.getConfiguration();
         try {

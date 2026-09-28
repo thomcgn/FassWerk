@@ -1496,6 +1496,11 @@ export interface components {
             reason: string;
             increase: boolean;
         };
+        /** @description Close the displayed business date exactly once for an idempotency key */
+        ManualDayCloseRequest: {
+            /** Format: date */
+            expectedBusinessDate: string;
+        };
         /** @description Refresh Token Request contract */
         RefreshTokenRequest: {
             refreshToken: string;
@@ -2319,7 +2324,9 @@ export interface operations {
     reopenUnpaid: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "Idempotency-Key"?: string;
+            };
             path: {
                 id: number;
             };
@@ -2341,7 +2348,9 @@ export interface operations {
     markUnpaid: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "Idempotency-Key"?: string;
+            };
             path: {
                 id: number;
             };
@@ -2391,7 +2400,9 @@ export interface operations {
     close: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "Idempotency-Key"?: string;
+            };
             path: {
                 id: number;
             };
@@ -2842,11 +2853,17 @@ export interface operations {
     closeBusinessDayManually: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManualDayCloseRequest"];
+            };
+        };
         responses: {
             /** @description Geschaeftstag abgeschlossen */
             200: {

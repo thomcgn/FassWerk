@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePendingMutation } from "@/lib/use-pending-mutation";
+import { PendingMutationNotice } from "@/components/pending-mutation-notice";
 import toast from "react-hot-toast";
 import {
   Settings,
@@ -17,9 +19,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import type { SalesConfiguration } from "@/types/api";
+import type { ManualDayCloseRequest, SalesConfiguration } from "@/types/api";
 
 export function SalesConfigurationDashboard() {
+  const mutation = usePendingMutation("manual-day-close-pending-v1");
   const [config, setConfig] = useState<SalesConfiguration | null>(null);
   const [editedConfig, setEditedConfig] = useState<SalesConfiguration | null>(null);
   const [loading, setLoading] = useState(true);
@@ -108,32 +111,24 @@ export function SalesConfigurationDashboard() {
     }
   };
 
-  const handleManualDayClose = async () => {
+  const handleManualDayClose = async (retry = false) => {
+    if (!config) return;
     try {
-      setSaving(true);
-      const response = await fetch("/api/inventory/configuration/manual-day-close", {
-        method: "POST",
+      const result = await mutation.run(retry ? undefined : {
+        url: "/api/inventory/configuration/manual-day-close", method: "POST",
+        body: JSON.stringify({ expectedBusinessDate: config.effectiveBusinessDate } satisfies ManualDayCloseRequest),
+        label: `Tagesabschluss ${config.effectiveBusinessDate}`,
+      }, async response => {
+        const data = await response.json() as SalesConfiguration;
+        if (!data.effectiveBusinessDate || !data.businessDayEndsAt) throw new Error("Ungültige Antwort beim Tagesabschluss");
+        return { ...data, businessDayEndsAt: data.businessDayEndsAt.slice(0, 5) };
       });
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({})) as { message?: string };
-        throw new Error(error.message || "Manueller Tagesabschluss fehlgeschlagen");
-      }
-      const data = await response.json() as SalesConfiguration;
-      const normalized = {
-        ...data,
-        businessDayEndsAt: data.businessDayEndsAt?.slice(0, 5) ?? "05:00",
-      };
-      setConfig(normalized);
-      setEditedConfig(normalized);
-      setStatus({ type: "success", message: "✓ Geschäftstag manuell abgeschlossen" });
-      setTimeout(() => setStatus(null), 3000);
+      if (!result) return;
+      setConfig(result.value);
+      setEditedConfig(result.value);
+      setStatus({ type: "success", message: `Tagesabschluss bestätigt. Aktueller Geschäftstag: ${result.value.effectiveBusinessDate}` });
     } catch (err) {
-      setStatus({
-        type: "error",
-        message: err instanceof Error ? err.message : "Fehler beim Tagesabschluss",
-      });
-    } finally {
-      setSaving(false);
+      setStatus({ type: "error", message: err instanceof Error ? err.message : "Fehler beim Tagesabschluss" });
     }
   };
 
@@ -268,12 +263,14 @@ export function SalesConfigurationDashboard() {
                   </p>
                 </div>
 
+                <PendingMutationNotice label={mutation.pending?.label} busy={mutation.busy}
+                  error={mutation.initializationError} onRetry={() => void handleManualDayClose(true)} />
                 <Button
                   type="button"
                   variant="secondary"
                   className="w-full"
-                  onClick={handleManualDayClose}
-                  disabled={saving}
+                  onClick={() => void handleManualDayClose()}
+                  disabled={saving || mutation.blocked}
                 >
                   Tagesabschluss manuell (+1 Tag)
                 </Button>
@@ -445,7 +442,7 @@ export function SalesConfigurationDashboard() {
           <Button
             variant="outline"
             onClick={handleReset}
-            disabled={!hasChanges || saving}
+            disabled={!hasChanges || saving || mutation.blocked}
             className="gap-2"
           >
             <RotateCw className="h-4 w-4" />
@@ -453,7 +450,7 @@ export function SalesConfigurationDashboard() {
           </Button>
           <Button
             onClick={handleSave}
-            disabled={!hasChanges || saving}
+            disabled={!hasChanges || saving || mutation.blocked}
             className="gap-2 bg-cyan-500 hover:bg-cyan-600"
           >
             <Save className="h-4 w-4" />

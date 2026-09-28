@@ -1,5 +1,5 @@
 // Real browser/BFF/backend/PostgreSQL acceptance. No fabricated API responses.
-import { chromium } from '@playwright/test';
+import { chromium, expect } from '@playwright/test';
 import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 
@@ -60,6 +60,43 @@ try {
     await api(`/api/reservations/${reservation.id}/confirm`, 'POST', {});
     await api(`/api/reservations/${reservation.id}/check-in`, 'POST');
     const order = await api(`/api/table-orders/open/table/${reservation.assignedTableIds[0]}`);
+    // Exercise the actual UI: server commits, response is lost, then reload/retry.
+    await page.goto(`${left}/table-billing`);
+    await page.getByPlaceholder('Order ID').fill(String(order.id));
+    await page.getByRole('button', { name: 'Laden', exact: true }).click();
+    async function lostUiAction(path, trigger, reload = false) {
+      let key;
+      let firstResult;
+      let attempts = 0;
+      await page.route(`${left}${path}`, async route => {
+        const requestKey = route.request().headers()['idempotency-key'];
+        assert.ok(requestKey, 'UI sends an operation key');
+        if (key) assert.equal(requestKey, key, 'UI retry preserves the original key');
+        key = requestKey;
+        const upstream = await route.fetch();
+        assert.ok(upstream.ok(), `UI operation: HTTP ${upstream.status()}`);
+        attempts++;
+        if (attempts === 1) {
+          firstResult = await upstream.json();
+          await route.abort('connectionreset');
+        } else { await route.fulfill({ response: upstream }); }
+      });
+      await trigger();
+      await expect(page.getByRole('button', { name: 'Offene Aktion wiederholen', exact: true })).toBeVisible({ timeout: 8000 });
+      if (reload) await page.reload();
+      await page.getByRole('button', { name: 'Offene Aktion wiederholen', exact: true }).click();
+      await expect(page.getByRole('button', { name: 'Offene Aktion wiederholen', exact: true })).toHaveCount(0);
+      await expect.poll(() => attempts).toBe(2);
+      await expect.poll(() => page.evaluate(() => sessionStorage.getItem('billing-pending-command-v1'))).toBeNull();
+      await page.unroute(`${left}${path}`);
+      return { key, result: firstResult };
+    }
+    const uiAdd = await lostUiAction(`/api/table-orders/${order.id}/items`,
+      () => page.getByRole('button', { name: /Audit beer · 250 ml/ }).click(), true);
+    assert.equal((await api(`/api/table-orders/${order.id}`)).items[0].quantity, 1);
+    await lostUiAction(`/api/table-orders/${order.id}/items/${uiAdd.result.items[0].id}`,
+      () => page.getByRole('button', { name: 'Entfernen', exact: true }).evaluate(button => { button.click(); button.click(); }));
+    assert.equal((await api(`/api/table-orders/${order.id}`)).items.length, 0);
     const addPath = `/api/table-orders/${order.id}/items`;
     const addBody = { drinkVariantId: variant.id, quantity: 3 };
     // Let the real request commit, then drop only its response to the browser.
@@ -86,13 +123,18 @@ try {
     const cancelled = await api(`${addPath}/${cancelItemId}`, 'DELETE', undefined, 'audit-cancel', right);
     assert.equal(cancelled.items[0].quantity, 2);
     const splitBody = { items: [{ itemId: replay.items[0].id, quantity: 1 }] };
-    const split = await api(`/api/table-orders/${order.id}/split-payment`, 'POST', splitBody, 'audit-split');
+    await page.reload();
+    await page.getByPlaceholder('Order ID').fill(String(order.id));
+    await page.getByRole('button', { name: 'Laden', exact: true }).click();
+    const uiSplit = await lostUiAction(`/api/table-orders/${order.id}/split-payment`,
+      () => page.getByRole('button', { name: 'Teilzahlung', exact: true }).click());
+    const split = await api(`/api/table-orders/${order.id}/split-payment`, 'POST', splitBody, uiSplit.key, right);
     assert.equal(Number(split.paidOrder.total), 3);
     assert.equal(split.openOrder.items[0].quantity, 1);
     const stock = (await api('/api/inventory')).find(item => item.id === inventory.id);
     assert.equal(Number(stock.totalStockAmount), 9.5);
     await writeFile(`${directory}/state.json`, JSON.stringify({ reservationId: reservation.id, orderId: order.id,
-      inventoryId: inventory.id, addBody, splitBody, cancelItemId, paidOrderId: split.paidOrder.id }), { mode: 0o600 });
+      inventoryId: inventory.id, addBody, splitBody, cancelItemId, splitKey: uiSplit.key, paidOrderId: split.paidOrder.id }), { mode: 0o600 });
     await context.storageState({ path: `${directory}/browser.json` });
     console.log('PASS: browser login, two BFF refreshes, reservation/check-in, lost response, add retry, split and stock');
   } else {
@@ -100,7 +142,7 @@ try {
     // Same credentials, same commands, all application processes restarted.
     await api(`/api/table-orders/${state.orderId}/items`, 'POST', state.addBody, 'audit-lost-add');
     await api(`/api/table-orders/${state.orderId}/items/${state.cancelItemId}`, 'DELETE', undefined, 'audit-cancel');
-    const split = await api(`/api/table-orders/${state.orderId}/split-payment`, 'POST', state.splitBody, 'audit-split', right);
+    const split = await api(`/api/table-orders/${state.orderId}/split-payment`, 'POST', state.splitBody, state.splitKey, right);
     assert.equal(split.paidOrder.id, state.paidOrderId);
     assert.equal(split.openOrder.items[0].quantity, 1);
     assert.equal(Number((await api('/api/inventory')).find(item => item.id === state.inventoryId).totalStockAmount), 9.5);
@@ -109,6 +151,34 @@ try {
     await api(`/api/reservations/${state.reservationId}/complete`, 'POST');
     const reservations = await api('/api/reservations');
     assert.equal(reservations.find(item => item.id === state.reservationId).status, 'COMPLETED');
+
+    // Manual day close through the real UI/BFF: replay after reload cannot advance twice.
+    const beforeDate = (await api('/api/inventory/configuration')).effectiveBusinessDate;
+    await page.goto(`${left}/sales-configuration`);
+    let dayKey;
+    let dayAttempts = 0;
+    await page.route(`${left}/api/inventory/configuration/manual-day-close`, async route => {
+      const key = route.request().headers()['idempotency-key'];
+      assert.ok(key);
+      if (dayKey) assert.equal(key, dayKey);
+      dayKey = key;
+      assert.equal(route.request().postDataJSON().expectedBusinessDate, beforeDate);
+      const upstream = await route.fetch();
+      assert.ok(upstream.ok());
+      if (++dayAttempts === 1) await route.abort('connectionreset');
+      else await route.fulfill({ response: upstream });
+    });
+    await page.getByRole('button', { name: 'Tagesabschluss manuell (+1 Tag)', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Offene Aktion wiederholen' })).toBeVisible();
+    await page.reload();
+    await page.getByRole('button', { name: 'Offene Aktion wiederholen' }).click();
+    await expect.poll(() => page.evaluate(() => sessionStorage.getItem('manual-day-close-pending-v1'))).toBeNull();
+    assert.equal(dayAttempts, 2);
+    const nextDate = new Date(`${beforeDate}T12:00:00Z`);
+    nextDate.setUTCDate(nextDate.getUTCDate() + 1);
+    assert.equal((await api('/api/inventory/configuration')).effectiveBusinessDate, nextDate.toISOString().slice(0, 10));
+    await page.unroute(`${left}/api/inventory/configuration/manual-day-close`);
+    console.log('PASS: actual UI add/cancel/split/day-close retries, durable keys after reload, exactly one effect');
 
     // A response completed before logout but delivered afterwards cannot authorize again.
     await api('/api/auth/refresh', 'POST', undefined, undefined, right);

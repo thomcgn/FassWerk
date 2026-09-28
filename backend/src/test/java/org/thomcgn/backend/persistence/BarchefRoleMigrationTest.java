@@ -11,7 +11,7 @@ class BarchefRoleMigrationTest extends MigratedPostgresTest {
 
     @Test
     void upgradePreservesAccountsAndAcceptsOnlySupportedRoles() throws Exception {
-        assertThat(migration("latest").migrate().migrationsExecuted).isEqualTo(7);
+        assertThat(migration("latest").migrate().migrationsExecuted).isEqualTo(8);
         try (var connection = databaseConnection(); var sql = connection.createStatement()) {
             sql.execute("insert into app_users(name,email,password_hash,role,active) values('Barchef','bar@example.test','not-a-login-hash','BARCHEF',false)");
             try (var rows = sql.executeQuery("select count(*) from app_users where role in ('ADMIN','STAFF')")) {

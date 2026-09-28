@@ -25,6 +25,8 @@ public class SalesConfigurationService {
 
     private final InventoryBusinessSettingsRepository inventoryBusinessSettingsRepository;
     private final java.time.Clock businessClock;
+    private final org.thomcgn.backend.common.persistence.BookingMutationLock bookingLock;
+    private final org.springframework.jdbc.core.JdbcTemplate jdbc;
 
     @Value("${app.sales.calculation.weeks-lookback:4}")
     private Integer defaultWeeksLookback;
@@ -61,6 +63,7 @@ public class SalesConfigurationService {
      */
     @Transactional
     public SalesConfigurationDto updateConfiguration(SalesConfigurationDto config) {
+        bookingLock.acquire();
         InventoryBusinessSettings settings = getOrCreateSettings();
         if (config.weeksLookback() != null) {
             if (config.weeksLookback() < 1 || config.weeksLookback() > 104) throw new BadRequestException("Lookback must be between 1 and 104 weeks");
@@ -92,13 +95,24 @@ public class SalesConfigurationService {
     }
 
     @Transactional
-    public SalesConfigurationDto closeBusinessDayManually() {
+    public SalesConfigurationDto closeBusinessDayManually(LocalDate expectedBusinessDate, String rawKey) {
+        String key = org.thomcgn.backend.common.application.IdempotencyKeys.optional(rawKey);
+        if (key == null || expectedBusinessDate == null) throw new BadRequestException("Idempotency-Key and expectedBusinessDate are required");
+        bookingLock.acquire();
+        var previous = jdbc.queryForList("select business_date from business_day_close_operations where operation_key=?", LocalDate.class, key);
+        if (!previous.isEmpty()) {
+            if (!previous.getFirst().equals(expectedBusinessDate)) {
+                throw new org.thomcgn.backend.common.exception.ConflictException("Idempotency-Key was already used for a different business date");
+            }
+            return getConfiguration();
+        }
+        if (!getCurrentBusinessDate().equals(expectedBusinessDate)) {
+            throw new org.thomcgn.backend.common.exception.ConflictException("Business date changed; reload configuration before closing another day");
+        }
         InventoryBusinessSettings settings = getOrCreateSettings();
-        LocalDate next = settings.getManualBusinessDate() != null
-                ? settings.getManualBusinessDate().plusDays(1)
-                : getCurrentBusinessDate().plusDays(1);
-        settings.setManualBusinessDate(next);
+        settings.setManualBusinessDate(expectedBusinessDate.plusDays(1));
         inventoryBusinessSettingsRepository.save(settings);
+        jdbc.update("insert into business_day_close_operations(operation_key,business_date) values(?,?)", key, expectedBusinessDate);
         return getConfiguration();
     }
 

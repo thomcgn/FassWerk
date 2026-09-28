@@ -220,8 +220,10 @@ public class InventoryController {
     @PostMapping("/configuration/manual-day-close")
     @Operation(summary = "Geschaeftstag manuell abschliessen")
     @ApiResponse(responseCode = "200", description = "Geschaeftstag abgeschlossen")
-    public SalesConfigurationResponse closeBusinessDayManually() {
-        return insights.closeBusinessDayManually();
+    public SalesConfigurationResponse closeBusinessDayManually(
+            @Valid @RequestBody org.thomcgn.backend.inventory.api.dto.ManualDayCloseRequest request,
+            @RequestHeader(name = "Idempotency-Key") String idempotencyKey) {
+        return insights.closeBusinessDayManually(request.expectedBusinessDate(), idempotencyKey);
     }
 }
 

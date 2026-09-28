@@ -179,10 +179,17 @@ public class TableOrderService {
 
     @Transactional
     public TableOrderResponse close(Long orderId) {
+        return close(orderId, null);
+    }
+
+    @Transactional
+    public TableOrderResponse close(Long orderId, String idempotencyKey) {
         bookingLock.acquire();
+        var existingOperation = replay(idempotencyKey, "CLOSE", orderId, "state");
+        if (existingOperation.isPresent()) return toResponse(existingOperation.get().getOrder());
         TableOrder order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new NotFoundException("Table order not found: " + orderId));
-        if (order.getStatus() == TableOrderStatus.CLOSED && order.isPaid()) return toResponse(order);
+        if (order.getStatus() == TableOrderStatus.CLOSED && order.isPaid()) return stateOperationResponse(idempotencyKey, "CLOSE", order);
         if (order.getStatus() != TableOrderStatus.OPEN) throw new ConflictException("Unpaid archived bill must be reopened before payment");
         order.setStatus(TableOrderStatus.CLOSED);
         order.setPaid(true);
@@ -191,15 +198,22 @@ public class TableOrderService {
 
         orderRepository.saveAndFlush(order);
         releaseAfterClose(order);
-        return toResponse(order);
+        return stateOperationResponse(idempotencyKey, "CLOSE", order);
     }
 
     @Transactional
     public TableOrderResponse markUnpaid(Long orderId) {
+        return markUnpaid(orderId, null);
+    }
+
+    @Transactional
+    public TableOrderResponse markUnpaid(Long orderId, String idempotencyKey) {
         bookingLock.acquire();
+        var existingOperation = replay(idempotencyKey, "MARK_UNPAID", orderId, "state");
+        if (existingOperation.isPresent()) return toResponse(existingOperation.get().getOrder());
         TableOrder order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new NotFoundException("Table order not found: " + orderId));
-        if (order.getStatus() == TableOrderStatus.CLOSED && !order.isPaid()) return toResponse(order);
+        if (order.getStatus() == TableOrderStatus.CLOSED && !order.isPaid()) return stateOperationResponse(idempotencyKey, "MARK_UNPAID", order);
         if (order.getStatus() != TableOrderStatus.OPEN) throw new ConflictException("Paid bill cannot be archived as unpaid");
         order.setStatus(TableOrderStatus.CLOSED);
         order.setPaid(false);
@@ -208,16 +222,23 @@ public class TableOrderService {
 
         orderRepository.saveAndFlush(order);
         releaseAfterClose(order);
-        return toResponse(order);
+        return stateOperationResponse(idempotencyKey, "MARK_UNPAID", order);
     }
 
     @Transactional
     public TableOrderResponse reopenUnpaid(Long orderId) {
+        return reopenUnpaid(orderId, null);
+    }
+
+    @Transactional
+    public TableOrderResponse reopenUnpaid(Long orderId, String idempotencyKey) {
         bookingLock.acquire();
+        var existingOperation = replay(idempotencyKey, "REOPEN_UNPAID", orderId, "state");
+        if (existingOperation.isPresent()) return toResponse(existingOperation.get().getOrder());
         TableOrder order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new NotFoundException("Table order not found: " + orderId));
 
-        if (order.getStatus() == TableOrderStatus.OPEN) return toResponse(order);
+        if (order.getStatus() == TableOrderStatus.OPEN) return stateOperationResponse(idempotencyKey, "REOPEN_UNPAID", order);
         if (order.getStatus() != TableOrderStatus.CLOSED || order.isPaid()) {
             throw new ConflictException("Only unpaid archived table orders can be reopened");
         }
@@ -240,7 +261,7 @@ public class TableOrderService {
         table.setStatus(TableStatus.OCCUPIED);
         tableRepository.save(table);
 
-        return toResponse(orderRepository.save(order));
+        return stateOperationResponse(idempotencyKey, "REOPEN_UNPAID", orderRepository.save(order));
     }
 
     @Transactional(readOnly = true)
@@ -424,6 +445,11 @@ public class TableOrderService {
         operation.setRequestFingerprint(fingerprint);
         operation.setResultOrder(result);
         operationRepository.save(operation);
+    }
+
+    private TableOrderResponse stateOperationResponse(String key, String type, TableOrder order) {
+        recordOperation(key, type, order, "state", null);
+        return toResponse(order);
     }
 
     private void releaseAfterClose(TableOrder order) {

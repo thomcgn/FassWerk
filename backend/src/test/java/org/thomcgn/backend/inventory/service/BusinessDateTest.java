@@ -37,6 +37,6 @@ class BusinessDateTest {
     private SalesConfigurationService service(InventoryBusinessSettings settings, String instant) {
         var repository = mock(InventoryBusinessSettingsRepository.class);
         when(repository.findTopByOrderByIdAsc()).thenReturn(Optional.of(settings));
-        return new SalesConfigurationService(repository, Clock.fixed(Instant.parse(instant), ZoneOffset.UTC));
+        return new SalesConfigurationService(repository, Clock.fixed(Instant.parse(instant), ZoneOffset.UTC), mock(org.thomcgn.backend.common.persistence.BookingMutationLock.class), mock(org.springframework.jdbc.core.JdbcTemplate.class));
     }
 }

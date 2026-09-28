@@ -142,8 +142,8 @@ public class InventoryInsightsApplicationService {
         );
     }
 
-    public SalesConfigurationResponse closeBusinessDayManually() {
-        var config = salesConfigurationService.closeBusinessDayManually();
+    public SalesConfigurationResponse closeBusinessDayManually(java.time.LocalDate expectedBusinessDate, String idempotencyKey) {
+        var config = salesConfigurationService.closeBusinessDayManually(expectedBusinessDate, idempotencyKey);
         return new SalesConfigurationResponse(
                 config.weeksLookback(),
                 config.defaultSafetyFactor(),

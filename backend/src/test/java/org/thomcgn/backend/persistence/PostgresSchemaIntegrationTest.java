@@ -14,7 +14,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class PostgresSchemaIntegrationTest extends MigratedPostgresTest {
     @Test
     void emptyDatabaseReachesCompleteSchemaOnlyThroughFlyway() throws Exception {
-        assertThat(flyway.info().applied()).hasSize(21);
+        assertThat(flyway.info().applied()).hasSize(22);
         assertThat(flyway.info().pending()).isEmpty();
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
         assertThat(flyway.migrate().migrationsExecuted).isZero();
@@ -26,7 +26,7 @@ class PostgresSchemaIntegrationTest extends MigratedPostgresTest {
                 var tables = new ArrayList<String>();
                 while (rows.next()) tables.add(rows.getString(1));
                 assertThat(tables).containsExactlyInAnyOrder(
-                        "auth_rate_buckets", "billing_operations", "reservation_tables", "app_users", "refresh_tokens", "revoked_access_tokens", "tables", "reservations",
+                        "business_day_close_operations", "auth_rate_buckets", "billing_operations", "reservation_tables", "app_users", "refresh_tokens", "revoked_access_tokens", "tables", "reservations",
                         "opening_hours", "booking_slot_config", "drink_categories", "drinks", "drink_variants",
                         "volume_prices", "inventory_items", "inventory_movements", "table_orders", "table_order_items",
                         "shift_settlements", "shift_worker_entries", "inventory_business_settings", "drink_sales_daily",
@@ -41,6 +41,7 @@ class PostgresSchemaIntegrationTest extends MigratedPostgresTest {
 
     @ParameterizedTest
     @CsvSource(delimiter = '|', value = {
+            "insert into business_day_close_operations(operation_key,business_date) values('same-key','2035-06-01'),('same-key','2035-06-02')|23505",
             "insert into tables(name,status,active) values('A','FREE',true),('A','FREE',true)|23505",
             "insert into drink_categories(name,sort_order,active) values('A',0,true),('A',1,true)|23505",
             "insert into volume_prices(volume_ml,price) values(9876,1),(9876,2)|23505",

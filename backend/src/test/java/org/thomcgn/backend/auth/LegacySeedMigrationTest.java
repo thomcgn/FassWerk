@@ -20,7 +20,7 @@ class LegacySeedMigrationTest extends MigratedPostgresTest {
                     insert into refresh_tokens (token_id, user_id, expires_at)
                     select 'session-' || id, id, now() + interval '1 day' from app_users
                     """);
-            assertThat(migration("latest").migrate().migrationsExecuted).isEqualTo(8);
+            assertThat(migration("latest").migrate().migrationsExecuted).isEqualTo(9);
             try (var rows = sql.executeQuery("select email, active, password_hash from app_users order by email")) {
                 int count = 0;
                 while (rows.next()) {

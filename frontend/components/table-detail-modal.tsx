@@ -15,6 +15,8 @@ function toCurrency(value: number | string): string {
 }
 
 interface TableDetailModalProps {
+  mutationBlocked?: boolean;
+  recovery?: React.ReactNode;
   isOpen: boolean;
   order: TableOrder | null;
   categories: DrinkCategory[];
@@ -33,6 +35,8 @@ interface TableDetailModalProps {
 
 export function TableDetailModal({
   isOpen,
+  mutationBlocked = false,
+  recovery,
   order,
   categories,
   drinks,
@@ -51,7 +55,7 @@ export function TableDetailModal({
   const [isAddingVariantId, setIsAddingVariantId] = useState<number | null>(null);
   const [splitQuantities, setSplitQuantities] = useState<Record<number, string>>({});
 
-  const canEditOrder = useMemo(() => order?.status === "OPEN", [order]);
+  const canEditOrder = useMemo(() => order?.status === "OPEN" && !mutationBlocked, [order, mutationBlocked]);
 
   const availableCategoryIds = useMemo(() => {
     const drinkIds = new Set(variants.map((variant) => variant.drinkId));
@@ -150,6 +154,7 @@ export function TableDetailModal({
         </CardHeader>
 
         <CardContent className="space-y-5 p-6">
+          {recovery}
           {order ? (
             <>
               <div className="space-y-4">
@@ -241,7 +246,7 @@ export function TableDetailModal({
                 </div>
                 <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
                   {order.status === "CLOSED" && !order.paid ? (
-                    <Button className="h-12" variant="secondary" onClick={() => void onReopenUnpaidOrder()}>
+                    <Button className="h-12" variant="secondary" disabled={mutationBlocked} onClick={() => void onReopenUnpaidOrder()}>
                       Wieder oeffnen
                     </Button>
                   ) : null}

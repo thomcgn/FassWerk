@@ -206,6 +206,24 @@ class ApiContractIntegrationTest extends PostgresIntegrationTest {
         assertThat(response.body()).doesNotContain("private-invalid-status");
     }
 
+    @Test
+    void manualDayCloseRetryCannotAdvanceTwice() throws Exception {
+        var previous = jdbc.queryForObject("select manual_business_date from inventory_business_settings order by id limit 1", java.time.LocalDate.class);
+        try {
+            jdbc.update("update inventory_business_settings set manual_business_date='2035-06-01'");
+            var key = java.util.UUID.randomUUID().toString();
+            var request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/inventory/configuration/manual-day-close"))
+                    .header("Authorization", "Bearer " + accessToken).header("Content-Type", "application/json")
+                    .header("Idempotency-Key", key)
+                    .POST(HttpRequest.BodyPublishers.ofString("{\"expectedBusinessDate\":\"2035-06-01\"}")).build();
+            var client = HttpClient.newHttpClient();
+            assertThat(client.send(request, HttpResponse.BodyHandlers.ofString()).statusCode()).isEqualTo(200);
+            assertThat(client.send(request, HttpResponse.BodyHandlers.ofString()).statusCode()).isEqualTo(200);
+            assertThat(jdbc.queryForObject("select manual_business_date from inventory_business_settings order by id limit 1", java.time.LocalDate.class))
+                    .isEqualTo(java.time.LocalDate.of(2035, 6, 2));
+        } finally { jdbc.update("update inventory_business_settings set manual_business_date=?", previous); }
+    }
+
     private void assertError(HttpResponse<String> response, int expected) throws Exception {
         assertThat(response.statusCode()).as(response.body()).isEqualTo(expected);
         JsonNode body = json.readTree(response.body());
