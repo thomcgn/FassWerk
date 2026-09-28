@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FullCalendarBookings } from "@/components/full-calendar-bookings";
 import { useToastFeedback } from "@/lib/use-toast-feedback";
-import type { CreateReservationRequest, Reservation } from "@/types/api";
+import type { CreateReservationRequest, Reservation, ReservationSettings } from "@/types/api";
 
 type LoadState = "loading" | "ready" | "error";
 type Props = { isAuthenticated: boolean };
@@ -32,6 +32,8 @@ export default function BookingsClient({ isAuthenticated }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
+  const [settings, setSettings] = useState<ReservationSettings | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
   const [createdReservation, setCreatedReservation] = useState<Reservation | null>(null);
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string | null>(null);
   const [cancellationModal, setCancellationModal] = useState<{ id: number; reason: string } | null>(null);
@@ -43,6 +45,19 @@ export default function BookingsClient({ isAuthenticated }: Props) {
     reservationTime: "18:00",
     guestCount: 20,
   });
+
+  useEffect(() => {
+    let active = true;
+    void fetch("/api/reservations/settings", { cache: "no-store" })
+      .then(async response => response.ok ? await response.json() as ReservationSettings : null)
+      .then(data => {
+        if (!active || !data || !Array.isArray(data.openingHours)) return;
+        setSettings(data);
+        setDateFilter(current => current === nowDate ? data.today : current);
+        setForm(current => ({ ...current, reservationDate: current.reservationDate === nowDate ? data.today : current.reservationDate }));
+      }).catch(() => { /* The backend still validates booking requests if settings cannot be displayed. */ });
+    return () => { active = false; };
+  }, []);
 
   useToastFeedback(error, "error");
   useToastFeedback(success, "success");
@@ -114,8 +129,8 @@ export default function BookingsClient({ isAuthenticated }: Props) {
       contactPhone: form.contactPhone?.trim() || undefined,
       guestCount: Number(form.guestCount),
     };
-    const response = await fetch("/api/reservations", {
-      method: "POST",
+    const response = await fetch(editingId ? `/api/reservations/${editingId}` : "/api/reservations", {
+      method: editingId ? "PUT" : "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
@@ -127,7 +142,8 @@ export default function BookingsClient({ isAuthenticated }: Props) {
     const created = (await response.json()) as Reservation;
     setForm((current) => ({ ...current, guestName: "", contactEmail: "", contactPhone: "" }));
     setCreatedReservation(created);
-    setSuccess("Reservierung gespeichert. Dein QR-Code ist sofort verfügbar.");
+    setSuccess(editingId ? "Reservierung aktualisiert." : "Reservierung gespeichert. Dein QR-Code ist sofort verfügbar.");
+    setEditingId(null);
     if (isAuthenticated) {
       setDateFilter(created.reservationDate);
       await loadReservations(created.reservationDate);
@@ -135,7 +151,17 @@ export default function BookingsClient({ isAuthenticated }: Props) {
     setSaving(false);
   }
 
-  async function runAction(id: number, action: "confirm" | "check-in" | "cancel") {
+  async function runAction(id: number, action: "confirm" | "check-in" | "cancel" | "edit") {
+    if (action === "edit") {
+      const reservation = reservations.find(item => item.id === id);
+      if (!reservation) return;
+      setEditingId(id);
+      setForm({ guestName: reservation.guestName, contactEmail: reservation.contactEmail || "",
+        contactPhone: reservation.contactPhone || "", reservationDate: reservation.reservationDate,
+        reservationTime: reservation.reservationTime, guestCount: reservation.guestCount });
+      document.getElementById("guestName")?.focus();
+      return;
+    }
     if (action === "cancel") {
       setCancellationModal({ id, reason: "" });
       return;
@@ -145,7 +171,7 @@ export default function BookingsClient({ isAuthenticated }: Props) {
       setError(await readErrorMessage(response, `Aktion ${action} fehlgeschlagen.`));
       return;
     }
-    setSuccess(action === "confirm" ? "Reservierung bestätigt." : "Reservierung eingecheckt.");
+    setSuccess(action === "confirm" ? "Reservierung bestätigt." : "Reservierung eingecheckt. Tischbons sind geoeffnet.");
     await loadReservations(dateFilter);
   }
 
@@ -160,7 +186,8 @@ export default function BookingsClient({ isAuthenticated }: Props) {
       setError(await readErrorMessage(response, "Stornierung fehlgeschlagen."));
       return;
     }
-    setSuccess("Reservierung abgelehnt.");
+    const updated = await response.json() as Reservation;
+    setSuccess(updated.status === "CANCELLED" ? "Reservierung storniert." : "Reservierung abgelehnt.");
     setCancellationModal(null);
     await loadReservations(dateFilter);
   }
@@ -207,11 +234,12 @@ export default function BookingsClient({ isAuthenticated }: Props) {
                 : (
                   <>
                     <span className="block font-semibold text-[color:var(--color-foreground)]">Öffnungszeiten</span>
-                    <span className="block">Mo-Mi: 18:00 - 01:00 Uhr</span>
-                    <span className="block">Do: 18:00 - 02:00 Uhr</span>
-                    <span className="block">Fr-Sa: 18:00 - 03:00 Uhr</span>
-                    <span className="block">So: geschlossen</span>
-                    <span className="mt-2 block">Hinweis: Bestätigte Reservierungen sind nur bis Buchungszeit +15 Minuten gültig, danach verfällt der Slot.</span>
+                    {settings ? <>
+                      {settings.openingHours.map(window => <span key={window.weekday} className="block">
+                        {window.weekday}: {window.open ? `${window.from?.slice(0, 5)} - ${window.to?.slice(0, 5)}${window.secondFrom ? ` / ${window.secondFrom.slice(0, 5)} - ${window.secondTo?.slice(0, 5)}` : ""}` : "geschlossen"}
+                      </span>)}
+                      <span className="mt-2 block">Zeitzone: {settings.timezone}. Kein festes Aufenthaltslimit. Ohne Check-in Verfall nach {settings.graceMinutes} Minuten; belegte Tische werden erst nach Bezahlung frei.</span>
+                    </> : <span className="block">Die aktuellen Buchungszeiten werden beim Senden serverseitig geprueft.</span>}
                   </>
                 )}
             </p>
@@ -270,7 +298,7 @@ export default function BookingsClient({ isAuthenticated }: Props) {
                   type="date"
                   value={form.reservationDate}
                   onChange={(event) => setForm((s) => ({ ...s, reservationDate: event.target.value }))}
-                  min={nowDate}
+                  min={settings?.today}
                 />
               </div>
               <div className="space-y-2">
@@ -289,7 +317,6 @@ export default function BookingsClient({ isAuthenticated }: Props) {
                 id="guestCount"
                 type="number"
                 min={1}
-                max={20}
                 value={String(form.guestCount)}
                 onChange={(event) => setForm((s) => ({ ...s, guestCount: Number(event.target.value) }))}
               />
@@ -297,8 +324,10 @@ export default function BookingsClient({ isAuthenticated }: Props) {
             {success ? <p className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{success}</p> : null}
             {error ? <p className="rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</p> : null}
             <Button onClick={() => void createReservation()} className="w-full" size="lg" disabled={saving || !form.guestName.trim()}>
-              {saving ? "Sende Anfrage..." : isAuthenticated ? "Reservierung anlegen" : "Tisch anfragen"}
+              {saving ? "Sende Anfrage..." : editingId ? "Aenderungen speichern" : isAuthenticated ? "Reservierung anlegen" : "Tisch anfragen"}
             </Button>
+
+            {editingId && <Button variant="outline" onClick={() => setEditingId(null)}>Bearbeitung abbrechen</Button>}
 
             {!isAuthenticated && createdReservation ? (
               <div className="rounded-2xl border border-[color:var(--color-border-strong)] bg-[color:var(--color-surface-muted)] p-4">

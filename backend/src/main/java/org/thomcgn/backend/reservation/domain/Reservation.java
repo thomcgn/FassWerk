@@ -1,6 +1,11 @@
 package org.thomcgn.backend.reservation.domain;
 
 import jakarta.persistence.Column;
+import jakarta.persistence.ManyToMany;
+import jakarta.persistence.JoinTable;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -57,5 +62,18 @@ public class Reservation extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "assigned_table_id")
     private TableEntity assignedTable;
+
+    @ManyToMany
+    @JoinTable(name = "reservation_tables",
+            joinColumns = @JoinColumn(name = "reservation_id"),
+            inverseJoinColumns = @JoinColumn(name = "table_id"))
+    private List<TableEntity> assignedTables = new ArrayList<>();
+
+    private Integer durationMinutes;
+    private Instant startsAt;
+    private Instant endsAt;
+    private Instant checkInDeadline;
+    private LocalDate businessDate;
+    private String reservationZone;
 }
 

@@ -11,9 +11,15 @@ import org.thomcgn.backend.reservation.domain.Reservation;
 public class ReservationMapper {
 
     private final QrProperties qrProperties;
+    private final java.time.Clock reservationClock;
 
     public ReservationResponse toResponse(Reservation reservation) {
-        String scanUrl = qrProperties.scanBaseUrl() + "/api/reservations/scan/" + reservation.getQrCodeToken();
+        String scanUrl = qrProperties.scanBaseUrl().replaceAll("/+$", "") + "/bookings/scan/" + reservation.getQrCodeToken();
+        var zone = reservation.getReservationZone() == null ? reservationClock.getZone()
+                : java.time.ZoneId.of(reservation.getReservationZone());
+        var start = reservation.getStartsAt() != null ? reservation.getStartsAt()
+                : reservation.getReservationDate().atTime(reservation.getReservationTime()).atZone(zone).toInstant();
+        var deadline = org.thomcgn.backend.reservation.application.ReservationRules.checkInDeadline(start);
         return new ReservationResponse(
                 reservation.getId(),
                 reservation.getGuestName(),
@@ -23,10 +29,16 @@ public class ReservationMapper {
                 reservation.getReservationTime(),
                 reservation.getGuestCount(),
                 reservation.getStatus(),
-                reservation.getExpiresAt(),
+                java.time.LocalDateTime.ofInstant(deadline, zone),
                 reservation.getCheckedInAt(),
                 reservation.getQrCodeToken(),
-                scanUrl
+                scanUrl,
+                reservation.getAssignedTables().stream().map(org.thomcgn.backend.table.domain.TableEntity::getId).toList(),
+                null,
+                reservation.getStartsAt(),
+                null,
+                reservation.getBusinessDate(),
+                reservation.getReservationZone()
         );
     }
 }

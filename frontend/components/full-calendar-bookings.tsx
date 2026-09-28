@@ -13,12 +13,12 @@ import { CheckCircle2, X } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import type { Reservation } from "@/types/api";
 
-type ReservationStatus = "PENDING" | "CONFIRMED" | "CHECKED_IN" | "REJECTED" | "CANCELLED" | "NO_SHOW";
+type ReservationStatus = Reservation["status"];
 
 interface FullCalendarBookingsProps {
   reservations: Reservation[];
   setDateFilter: (date: string) => void;
-  onAction: (id: number, action: "confirm" | "check-in" | "cancel") => void;
+  onAction: (id: number, action: "confirm" | "check-in" | "cancel" | "edit") => void;
   cancellationModal: { id: number; reason: string } | null;
   setCancellationModal: (modal: { id: number; reason: string } | null) => void;
   onConfirmCancellation: () => Promise<void>;
@@ -46,6 +46,8 @@ function groupReservationsByStatus(reservations: Reservation[]): Record<Reservat
     REJECTED: [],
     CANCELLED: [],
     NO_SHOW: [],
+    EXPIRED: [],
+    COMPLETED: [],
   };
 
   reservations.forEach((res) => {
@@ -90,13 +92,13 @@ export function FullCalendarBookings({
 
   // Offene Reservierungen für Aktionen
   const actionableReservations = useMemo(
-    () => reservations.filter((res) => res.status === "PENDING" || res.status === "CONFIRMED"),
+    () => reservations.filter((res) => res.status === "PENDING" || res.status === "CONFIRMED" || res.status === "CHECKED_IN"),
     [reservations],
   );
 
   // Abgelehnte Reservierungen separat als read-only Liste
   const rejectedReservations = useMemo(
-    () => reservations.filter((res) => res.status === "REJECTED"),
+    () => reservations.filter((res) => ["REJECTED", "CANCELLED", "NO_SHOW", "EXPIRED", "COMPLETED"].includes(res.status)),
     [reservations],
   );
 
@@ -189,6 +191,10 @@ export function FullCalendarBookings({
                 </>
               )}
 
+              {(viewFilter === "OPEN" || viewFilter === "ALL") && grouped.CHECKED_IN.map(res => (
+                <ResCard key={res.id} reservation={res} onAction={onAction} onCancelClick={() => undefined} />
+              ))}
+
               {/* PENDING */}
               {(viewFilter === "OPEN" || viewFilter === "ALL") && grouped.PENDING.length > 0 && (
                 <>
@@ -256,7 +262,7 @@ function ResCard({
   readOnly,
 }: {
   reservation: Reservation;
-  onAction: (id: number, action: "confirm" | "check-in" | "cancel") => void;
+  onAction: (id: number, action: "confirm" | "check-in" | "cancel" | "edit") => void;
   onCancelClick: () => void;
   readOnly?: boolean;
 }) {
@@ -272,6 +278,7 @@ function ResCard({
           <p className="font-semibold text-[color:var(--color-foreground)]">{reservation.guestName}</p>
           <p className="text-[color:var(--color-muted-foreground)]">{toLocalDateTime(reservation.reservationDate, reservation.reservationTime)} · {reservation.guestCount}P</p>
         </div>
+        <span>Tische: {reservation.assignedTableIds?.join(", ") || "Noch nicht zugeordnet"}</span>
         <Badge variant={variant} className="shrink-0">{reservation.status}</Badge>
       </div>
       {!isReadOnly ? (
@@ -288,9 +295,13 @@ function ResCard({
               Check-in
             </Button>
           )}
-          <Button size="sm" variant="destructive" onClick={onCancelClick} className="flex-1 h-7 text-xs">
-            Ablehnen
-          </Button>
+          {(isPending || canCheckIn) && <>
+            <Button size="sm" variant="outline" onClick={() => onAction(reservation.id, "edit")}>Bearbeiten</Button>
+            <Button size="sm" variant="destructive" onClick={onCancelClick} className="flex-1 h-7 text-xs">
+              {isPending ? "Ablehnen" : "Stornieren"}
+            </Button>
+          </>}
+          {reservation.status === "CHECKED_IN" && <span className="text-sm">Tische bleiben bis zur Bezahlung belegt.</span>}
         </div>
       ) : null}
     </div>

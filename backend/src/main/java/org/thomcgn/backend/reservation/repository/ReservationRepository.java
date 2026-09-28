@@ -1,6 +1,7 @@
 package org.thomcgn.backend.reservation.repository;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.thomcgn.backend.reservation.domain.Reservation;
@@ -13,7 +14,15 @@ import java.util.List;
 import java.util.Optional;
 
 public interface ReservationRepository extends JpaRepository<Reservation, Long> {
+    @Override
+    @EntityGraph(attributePaths = "assignedTables")
+    Optional<Reservation> findById(Long id);
 
+    @EntityGraph(attributePaths = "assignedTables")
+    List<Reservation> findByStatusIn(Collection<ReservationStatus> statuses);
+
+
+    @EntityGraph(attributePaths = "assignedTables")
     Optional<Reservation> findByQrCodeToken(String qrCodeToken);
 
     @Query("""
@@ -29,6 +38,7 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
             @Param("statuses") Collection<ReservationStatus> statuses
     );
 
+    @EntityGraph(attributePaths = "assignedTables")
     List<Reservation> findByReservationDateOrderByReservationTimeAsc(LocalDate reservationDate);
 
     @Query("""

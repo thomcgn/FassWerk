@@ -130,3 +130,59 @@ must be available; unavailable Docker fails the tests rather than skipping them.
 See [database test strategy](testing.md) for isolation, coverage and concurrency findings.
 Playwright uses one worker locally and in CI because its shared Next dev server
 compiles routes on demand; test timeouts and assertions are unchanged.
+
+## Phase 6: Browser-Origin und BARCHEF
+
+APP_ORIGIN definiert die exakte oeffentliche Frontend-Origin, z.B.
+https://bar.example.org (Schema, Host und gegebenenfalls Port; kein Pfad).
+Compose reicht die Variable an Next.js weiter und verwendet fuer lokale Starts
+http://localhost:3000. Bei Zugriff ueber eine andere Adresse unbedingt anpassen.
+Ohne Variable verwendet der direkte Next-Prozess HTTP-Host und Request-Schema
+(keine Gleichsetzung von localhost und 127.0.0.1).
+Origin wird nicht aus unkontrollierten X-Forwarded-Host-Headern uebernommen.
+
+Schreibende Cookie-Requests an /api brauchen einen passenden Origin-Header.
+CLI-/Integrationsclients sollten die Bearer-API des Backends verwenden; fehlender
+Origin am BFF ist kein Grund, die CSRF-Pruefung abzuschalten.
+
+Neue Rolle BARCHEF: operative STAFF-Rechte plus Lieferanten-/Nachbestellverwaltung,
+Berechnung und manueller Tagesabschluss. Andere ADMIN-Rechte werden nicht implizit
+vergeben. V22 fuehrt die erlaubten Rollen als Datenbank-Constraint; alte Migrationen
+bleiben unveraendert. Es wird kein Konto angelegt oder automatisch befoerdert.
+Vor Rollenzuweisung alle Backend-Instanzen aktualisieren und Bestandswerte pruefen:
+
+```sql
+select id, role from app_users where role not in ('ADMIN', 'STAFF', 'BARCHEF');
+```
+
+Die kontrollierte Zuweisung an einen vom Betreiber ausgewaehlten Benutzer erfolgt
+ueber die bestehende administrative Datenbankverwaltung; danach neu anmelden.
+Kein produktives Konto wurde im Refactoring veraendert.
+
+BFF-Refresh-Koordination ist pro Prozess, nicht clusterweit. Vor mehreren
+Frontend-Instanzen gemeinsame Sessionkoordination planen. Rate Limiting, TLS/HSTS
+am externen Proxy sowie sofortiger Widerruf saemtlicher Access-Tokens bleiben
+explizite Betriebs-/Security-Aufgaben; siehe architecture/SECURITY_REVIEW.md.
+
+## Reservation Configuration (Phase 7)
+
+- `RESERVATION_TIMEZONE`: IANA venue zone, default `Europe/Berlin`; passed through
+  Docker Compose. New bookings persist zone and UTC interval snapshots.
+- `QR_SCAN_BASE_URL`: externally reachable **frontend** origin, default
+  `http://localhost:3000`. Links now open `/bookings/scan/{token}`.
+- Opening hours and booking-slot configuration remain database-backed. The public
+  read-only `GET /api/reservations/settings` exposes authoritative display metadata.
+- Existing tables have unknown capacity after V23; configure seats through
+  Tischabrechnung -> Tischkapazitaeten before enabling automatic reservation booking.
+
+See `docs/architecture/RESERVATION_RULES.md` for legacy booking handling and limits.
+
+### Payment-bound Occupancy Correction
+
+The 180-minute duration assumption from the original Phase 7 is removed. Public
+reservation settings expose `durationMinutes: null` and `graceMinutes: 30`.
+Legacy database duration/grace columns remain historical/compatibility fields, not
+active policy controls. No-show timing uses elapsed instants in the configured venue
+zone. CHECKED_IN tables remain occupied until full payment, including unpaid archives.
+Read `docs/architecture/RESERVATION_RULES.md` before applying V24, especially the
+duplicate-open-bill precheck and review of legacy turnover bookings.

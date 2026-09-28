@@ -44,7 +44,7 @@ app:
     admin-email: ${BOOTSTRAP_ADMIN_EMAIL:}
     admin-password: ${BOOTSTRAP_ADMIN_PASSWORD:}
   qr:
-    scan-base-url: ${QR_SCAN_BASE_URL:http://localhost:8080}
+    scan-base-url: ${QR_SCAN_BASE_URL:http://localhost:3000}
   auth:
     cleanup:
       enabled: ${AUTH_CLEANUP_ENABLED:true}
@@ -90,6 +90,7 @@ app:
       # Default lead time in days for supplier deliveries
       default-lead-time-days: ${SALES_DEFAULT_LEAD_TIME_DAYS:3}
   reservation:
+    timezone: ${RESERVATION_TIMEZONE:Europe/Berlin}
     mail:
       enabled: ${RESERVATION_MAIL_ENABLED:false}
       from: ${RESERVATION_MAIL_FROM:no-reply@fasswerk.local}

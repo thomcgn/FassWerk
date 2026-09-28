@@ -9,5 +9,8 @@ public record LoginResponse(
         String role,
         String displayName
 ) {
+    @Override
+    public String toString() {
+        return "LoginResponse[REDACTED]";
+    }
 }
-

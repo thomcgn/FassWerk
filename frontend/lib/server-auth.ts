@@ -1,4 +1,6 @@
 import { cookies } from "next/headers";
+import { createHash } from "node:crypto";
+import { createRefreshCoordinator } from "@/lib/refresh-coordinator";
 import { BACKEND_BASE_URL } from "@/lib/config";
 import {
   ACCESS_TOKEN_COOKIE,
@@ -6,6 +8,11 @@ import {
   REFRESH_TOKEN_COOKIE,
 } from "@/lib/auth-cookies";
 import type { LoginResponse, SessionResponse } from "@/types/api";
+
+const authGlobal = globalThis as typeof globalThis & {
+  fasswerkRefresh?: ReturnType<typeof createRefreshCoordinator<LoginResponse | null>>;
+};
+const coordinateRefresh = authGlobal.fasswerkRefresh ??= createRefreshCoordinator<LoginResponse | null>();
 
 const isProd = process.env.NODE_ENV === "production";
 
@@ -74,19 +81,24 @@ export async function refreshSession(): Promise<boolean> {
     return false;
   }
 
-  const response = await fetch(`${BACKEND_BASE_URL}/api/auth/refresh`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ refreshToken }),
-    cache: "no-store",
+  const key = createHash("sha256").update(refreshToken).digest("hex");
+  const payload = await coordinateRefresh(key, async () => {
+    const response = await fetch(`${BACKEND_BASE_URL}/api/auth/refresh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refreshToken }),
+      cache: "no-store",
+    });
+    if (response.status === 401) return null;
+    if (!response.ok) throw new Error("Authentication temporarily unavailable");
+    return (await response.json()) as LoginResponse;
   });
 
-  if (!response.ok) {
+  if (!payload) {
     await clearTokenCookies();
     return false;
   }
 
-  const payload = (await response.json()) as LoginResponse;
   await applyTokenCookies(payload);
   return true;
 }

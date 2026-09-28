@@ -64,35 +64,42 @@ class ConcurrentWritesCharacterizationTest extends PostgresIntegrationTest {
     @BeforeEach
     void resetFixtures() {
         jdbc.execute("truncate table tables, inventory_items, app_users, drink_categories restart identity cascade");
-        jdbc.update("insert into tables(name,status,active) values('Concurrent table','FREE',true)");
+        jdbc.update("insert into tables(name,status,active,seats) values('Concurrent table','FREE',true,4)");
     }
 
     // Spring repository proxies delegate through the spy default answer, not callRealMethod().
     @Test
-    void knownGap_twoReservationsCanConsumeTheSameLastSlot() throws Exception {
+    void parallelReservationsCannotConsumeTheSameLastTable() throws Exception {
         var barrier = new CyclicBarrier(2);
-        doAnswer(call -> {
-            Object result = mockingDetails(call.getMock()).getMockCreationSettings().getDefaultAnswer().answer(call);
-            barrier.await(10, TimeUnit.SECONDS);
-            return result;
-        }).when(reservationRepository).getReservationCountForSlot(any(), any(), any());
+        var successes = new java.util.concurrent.atomic.AtomicInteger();
+        var conflicts = new java.util.concurrent.atomic.AtomicInteger();
         var request = new CreateReservationRequest("Concurrent guest", null, null,
                 LocalDate.now().plusDays(7), LocalTime.of(18, 0), 1);
-        race(() -> reservations.createReservation(request));
-        assertThat(jdbc.queryForObject("select count(*) from reservations", Integer.class)).isEqualTo(2);
-        assertThat(jdbc.queryForObject("select count(*) from tables where active", Integer.class)).isEqualTo(1);
+        race(() -> {
+            barrier.await(10, TimeUnit.SECONDS);
+            try { reservations.createReservation(request); successes.incrementAndGet(); }
+            catch (org.thomcgn.backend.common.exception.ConflictException expected) { conflicts.incrementAndGet(); }
+            return null;
+        });
+        assertThat(successes.get()).isEqualTo(1);
+        assertThat(conflicts.get()).isEqualTo(1);
+        assertThat(jdbc.queryForObject("select count(*) from reservations", Integer.class)).isEqualTo(1);
     }
 
     @Test
-    void knownGap_twoOpenOrdersCanBeCreatedForOneTable() throws Exception {
+    void concurrentOpenCreatesExactlyOneBill() throws Exception {
         var barrier = new CyclicBarrier(2);
-        doAnswer(call -> {
-            Object result = mockingDetails(call.getMock()).getMockCreationSettings().getDefaultAnswer().answer(call);
+        var successes = new AtomicInteger();
+        var conflicts = new AtomicInteger();
+        race(() -> {
             barrier.await(10, TimeUnit.SECONDS);
-            return result;
-        }).when(orderRepository).findFirstByTableIdAndStatus(1L, TableOrderStatus.OPEN);
-        race(() -> orders.open(new OpenTableOrderRequest(1L, null)));
-        assertThat(jdbc.queryForObject("select count(*) from table_orders where status='OPEN'", Integer.class)).isEqualTo(2);
+            try { orders.open(new OpenTableOrderRequest(1L, null)); successes.incrementAndGet(); }
+            catch (org.thomcgn.backend.common.exception.ConflictException expected) { conflicts.incrementAndGet(); }
+            return null;
+        });
+        assertThat(successes.get()).isEqualTo(1);
+        assertThat(conflicts.get()).isEqualTo(1);
+        assertThat(jdbc.queryForObject("select count(*) from table_orders where status='OPEN'", Integer.class)).isEqualTo(1);
     }
 
     @Test
@@ -116,24 +123,34 @@ class ConcurrentWritesCharacterizationTest extends PostgresIntegrationTest {
     }
 
     @Test
-    void knownGap_sameRefreshTokenCanProduceTwoSuccessors() throws Exception {
+    void concurrentRefreshHasOneSuccessorAndReplayRevokesIt() throws Exception {
         jdbc.update("insert into app_users(name,email,password_hash,role,active) values('Race','race@example.test',?,'ADMIN',true)",
                 encoder.encode("Only-a-test-password"));
         var metadata = new ClientMetadata("Concurrency test", "127.0.0.1");
         var login = auth.login(new LoginRequest("race@example.test", "Only-a-test-password"), metadata);
         var barrier = new CyclicBarrier(2);
-        doAnswer(call -> {
-            Object result = mockingDetails(call.getMock()).getMockCreationSettings().getDefaultAnswer().answer(call);
+        var successes = new java.util.concurrent.atomic.AtomicInteger();
+        var rejections = new java.util.concurrent.atomic.AtomicInteger();
+        race(() -> {
             barrier.await(10, TimeUnit.SECONDS);
-            return result;
-        }).when(refreshRepository).findByTokenIdAndRevokedAtIsNull(anyString());
-        race(() -> auth.refresh(new RefreshTokenRequest(login.refreshToken()), metadata));
-        assertThat(jdbc.queryForObject("select count(*) from refresh_tokens where revoked_at is null", Integer.class)).isEqualTo(2);
+            try {
+                auth.refresh(new RefreshTokenRequest(login.refreshToken()), metadata);
+                successes.incrementAndGet();
+            } catch (org.thomcgn.backend.auth.AuthenticationRejectedException expected) {
+                rejections.incrementAndGet();
+            }
+            return null;
+        });
+        assertThat(successes.get()).isEqualTo(1);
+        assertThat(rejections.get()).isEqualTo(1);
+        assertThat(jdbc.queryForObject("select count(*) from refresh_tokens", Integer.class)).isEqualTo(2);
+        assertThat(jdbc.queryForObject("select count(*) from refresh_tokens where revoked_at is null", Integer.class)).isZero();
         assertThat(jdbc.queryForObject("select count(*) from refresh_tokens where revoked_reason='ROTATED'", Integer.class)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("select count(*) from refresh_tokens where revoked_reason='REFRESH_REPLAY'", Integer.class)).isEqualTo(1);
     }
 
     @Test
-    void knownGap_parallelPartialPaymentsDuplicatePaidQuantity() throws Exception {
+    void parallelPartialPaymentsCannotDuplicatePaidQuantity() throws Exception {
         jdbc.update("insert into drink_categories(name,sort_order,active) values('Race',0,true)");
         jdbc.update("insert into drinks(category_id,name,active) values(1,'Race drink',true)");
         jdbc.update("insert into drink_variants(drink_id,display_volume_name,volume_ml,price,active) values(1,'Glass',250,3,true)");
@@ -143,18 +160,20 @@ class ConcurrentWritesCharacterizationTest extends PostgresIntegrationTest {
                 values(1,1,3,3,9,750)
                 """);
         var barrier = new CyclicBarrier(2);
-        var reads = new AtomicInteger();
-        doAnswer(call -> {
-            Object result = mockingDetails(call.getMock()).getMockCreationSettings().getDefaultAnswer().answer(call);
-            // Only synchronize the initial snapshots, not later response/remaining-item reads.
-            if (reads.incrementAndGet() <= 2) barrier.await(10, TimeUnit.SECONDS);
-            return result;
-        }).when(itemRepository).findByTableOrderId(1L);
+        var successes = new AtomicInteger();
+        var rejections = new AtomicInteger();
         var request = new SplitTableOrderPaymentRequest(List.of(new SplitTableOrderItemRequest(1L, 2)));
-        race(() -> orders.splitPayment(1L, request));
+        race(() -> {
+            barrier.await(10, TimeUnit.SECONDS);
+            try { orders.splitPayment(1L, request); successes.incrementAndGet(); }
+            catch (org.thomcgn.backend.common.exception.BadRequestException expected) { rejections.incrementAndGet(); }
+            return null;
+        });
+        assertThat(successes.get()).isEqualTo(1);
+        assertThat(rejections.get()).isEqualTo(1);
         assertThat(jdbc.queryForObject("""
                 select sum(i.quantity) from table_order_items i join table_orders o on o.id=i.table_order_id where o.paid
-                """, Integer.class)).isEqualTo(4);
+                """, Integer.class)).isEqualTo(2);
         assertThat(jdbc.queryForObject("select quantity from table_order_items where table_order_id=1", Integer.class)).isEqualTo(1);
     }
 

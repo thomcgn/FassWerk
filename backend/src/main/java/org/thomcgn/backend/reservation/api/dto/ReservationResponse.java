@@ -18,7 +18,13 @@ public record ReservationResponse(
         LocalDateTime expiresAt,
         LocalDateTime checkedInAt,
         String qrCodeToken,
-        String qrScanUrl
+        String qrScanUrl,
+        java.util.List<Long> assignedTableIds,
+        Integer durationMinutes,
+        java.time.Instant startsAt,
+        java.time.Instant endsAt,
+        LocalDate businessDate,
+        String timezone
 ) {
 }
 

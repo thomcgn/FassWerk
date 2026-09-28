@@ -140,3 +140,82 @@ cd backend
 Diese Tests ersetzen weder die Rollenmatrix (Phase 6), die bekannten
 Konkurrenz-Charakterisierungen noch einen echten Frontend-Backend-E2E-Vertrag.
 Die kritischen Playwright-Tests verwenden weiterhin API-Mocks.
+
+## Security-Gates (Phase 6)
+
+SecurityHardeningIntegrationTest prueft echte HTTP-Autorisierung einschliesslich
+aller registrierten Fach-Endpunkte, aktiver Konten, Rollenwechsel, BARCHEF,
+Sessionownership, Health/CORS und Secret-freier Security-Fehler.
+Bei generischen Schreibproben reichen 400/404 zum Nachweis, dass die Autorisierung
+passiert wurde; separate positive Requests pruefen echte Use-Case-Erfolge.
+Jede Rollenprobe verwendet ein frisches Access-Token, weil Logout-all das
+mitgegebene Token absichtlich widerruft.
+
+JwtTokenServiceTest deckt Signatur, Issuer, Ablauf, Pflichtclaims, Tokenlifetimes,
+BARCHEF und DTO-Logredaktion ab. BarchefRoleMigrationTest prueft V21 -> V22.
+Der Refresh-knownGap-Test ist jetzt ein Konkurrenz-Solltest: genau ein Nachfolger,
+der nach dem konkurrierenden Replay widerrufen ist. Die vier anderen knownGap-Tests
+bleiben bewusst Reproduktionen noch nicht behobener fachlicher Fehler.
+
+Frontend ohne neues Testframework:
+```bash
+cd frontend
+npm run test:security
+npm run test:e2e:critical
+```
+
+Die nativen Node-Tests brauchen Type-Stripping-Unterstuetzung (Node >= 22.6).
+Die neuen BFF-Tests im kritischen Playwright-Satz verwenden echte Next-HTTP-Routen
+fuer Origin-/Headerpruefungen, keine API-Mocks. Die bisherigen neun fachlichen
+Browserfaelle verwenden weiterhin API-Mocks und belegen keinen Vollstackvertrag.
+In der aktuellen Node-25-Umgebung meldet der native Testimport eine
+MODULE_TYPELESS_PACKAGE_JSON-Warnung, weil das bestehende Frontend keinen expliziten
+package type besitzt; die drei Tests bestehen. Warnungen werden nicht unterdrueckt.
+
+## Reservation Gates (Phase 7)
+
+- ReservationRulesTest: overnight business date, split opening windows, full-stay
+  fit, FIXED/FLEXIBLE intervals, DST gaps/ambiguities and elapsed duration,
+  same-area multi-table allocation and missing capacities.
+- ReservationLifecycleIntegrationTest: PostgreSQL-backed allocation, concurrency,
+  atomic failed rescheduling, cancellations, check-in boundaries, completion,
+  persisted deadlines, capacity mutation guards, older-client compatibility and
+  after-commit mail including rollback and SMTP failure.
+- Its HTTP contract test uses a real server, persisted BARCHEF account and disabled
+  Open-Session-in-View, covering public settings/create, protected read/update/scan
+  and multi-table DTO serialization.
+- ReservationRegressionTest: past creation, unknown capacity, missed prior-day
+  no-shows and terminal cancellation.
+- ReservationCapacityMigrationTest: V22 -> V23 preserves old assignments and leaves
+  unknown capacities/snapshots NULL; fresh PostgreSQL applies 16 migrations.
+- The former reservation double-booking knownGap is now a concurrency invariant.
+  Three billing/inventory knownGap reproductions remain for Phase 8.
+- Browser tests include explicit QR scan/check-in, denied scan without guest data
+  and explicit seat entry. Business UI tests mock APIs; they are not full-stack
+  tests. The backend HTTP contract is tested independently.
+
+## Reservation/Payment Follow-up
+
+The original 180-minute Phase 7 tests are superseded by payment-bound occupancy.
+ReservationRulesTest now checks arrival-only windows, fixed 30-minute elapsed
+no-show grace and DST-safe DTO expiry display. ReservationLifecycleIntegrationTest
+covers real PostgreSQL group check-in, directly bookable drinks/stock deduction,
+partial payment, per-table full payment, unpaid archival/reopening, no time expiry
+after arrival, no-show at exactly 30 minutes, old 15-minute snapshots, atomic rollback
+of a conflicting group check-in, payment rollback and concurrent repeated check-in.
+Its HTTP contract includes reading the automatically opened bills and settling
+them through the real protected endpoints.
+
+ReservationPaymentMigrationTest verifies V23 -> V24, preservation of historical
+snapshots, unbounded new reservations and the unique OPEN-bill constraint. A second
+case verifies that historical duplicate OPEN bills block migration without deleting
+financial records. Fresh PostgreSQL now applies 17 migrations.
+
+Duplicate-open and double-split-payment concurrency tests now assert safe outcomes.
+The independent inventory-adjustment lost-update knownGap remains, so these changes
+do not constitute completion of the full Phase 8 inventory work.
+
+Browser tests also verify no manual reservation-completion button, reuse of a table
+after the final split payment, and unpaid archival/reopening without replacement
+bills. Business browser tests remain mocked; actual backend state is covered by the
+independent PostgreSQL and HTTP integration tests.

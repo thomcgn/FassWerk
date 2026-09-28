@@ -31,6 +31,7 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in your private environment}
       FLYWAY_CONNECT_RETRIES: 30
       FLYWAY_CONNECT_RETRIES_INTERVAL: 2s
+      RESERVATION_TIMEZONE: ${RESERVATION_TIMEZONE:-Europe/Berlin}
       QR_SCAN_BASE_URL: ${QR_SCAN_BASE_URL:-http://localhost:3000}
       BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
@@ -56,6 +57,7 @@ services:
     restart: unless-stopped
     environment:
       BACKEND_BASE_URL: http://backend:8080
+      APP_ORIGIN: ${APP_ORIGIN:-http://localhost:3000}
     depends_on:
       backend:
         condition: service_started

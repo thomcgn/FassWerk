@@ -1,86 +1,72 @@
 package org.thomcgn.backend.auth;
 
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+import org.thomcgn.backend.auth.repository.AppUserRepository;
 import org.thomcgn.backend.auth.repository.RevokedAccessTokenRepository;
+import org.thomcgn.backend.common.api.SecurityErrorResponseWriter;
 
 import java.io.IOException;
 import java.time.OffsetDateTime;
-import java.util.Collection;
-import java.util.Collections;
 import java.util.List;
 
 @Component
 @RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
-
     private final JwtTokenService jwtTokenService;
     private final RevokedAccessTokenRepository revokedAccessTokenRepository;
+    private final AppUserRepository appUserRepository;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
         String authHeader = request.getHeader(HttpHeaders.AUTHORIZATION);
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            filterChain.doFilter(request, response);
-            return;
-        }
-
-        String token = authHeader.substring(7);
-        try {
-            Claims claims = jwtTokenService.parseToken(token);
-            String tokenType = claims.get(JwtTokenService.CLAIM_TOKEN_TYPE, String.class);
-            if (!JwtTokenService.TOKEN_TYPE_ACCESS.equals(tokenType)) {
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            try {
+                authenticate(jwtTokenService.parseToken(authHeader.substring(7)));
+            } catch (JwtException | IllegalArgumentException exception) {
                 SecurityContextHolder.clearContext();
-                filterChain.doFilter(request, response);
+            } catch (DataAccessException exception) {
+                SecurityContextHolder.clearContext();
+                SecurityErrorResponseWriter.write(request, response, 503);
                 return;
             }
-
-            String tokenId = claims.get(JwtTokenService.CLAIM_TOKEN_ID, String.class);
-            if (tokenId == null || tokenId.isBlank() || revokedAccessTokenRepository.existsByTokenIdAndExpiresAtAfter(tokenId, OffsetDateTime.now())) {
-                SecurityContextHolder.clearContext();
-                filterChain.doFilter(request, response);
-                return;
-            }
-
-            String username = claims.getSubject();
-            Collection<? extends GrantedAuthority> authorities = extractAuthorities(claims);
-
-            User principal = new User(username, "N/A", authorities);
-            Authentication authentication = new UsernamePasswordAuthenticationToken(principal, token, authorities);
-            SecurityContextHolder.getContext().setAuthentication(authentication);
-        } catch (Exception ignored) {
-            SecurityContextHolder.clearContext();
         }
-
+        // Never catch exceptions from downstream controllers or invoke the chain twice.
         filterChain.doFilter(request, response);
     }
 
-    @SuppressWarnings("unchecked")
-    private Collection<? extends GrantedAuthority> extractAuthorities(Claims claims) {
-        Object rawRoles = claims.get("roles");
-        if (!(rawRoles instanceof List<?> roles)) {
-            return Collections.emptyList();
+    private void authenticate(Claims claims) {
+        if (!JwtTokenService.TOKEN_TYPE_ACCESS.equals(claims.get(JwtTokenService.CLAIM_TOKEN_TYPE, String.class))
+                || revokedAccessTokenRepository.existsByTokenIdAndExpiresAtAfter(claims.getId(), OffsetDateTime.now())) {
+            SecurityContextHolder.clearContext();
+            return;
         }
-
-        return roles.stream()
-                .filter(String.class::isInstance)
-                .map(String.class::cast)
-                .map(SimpleGrantedAuthority::new)
-                .toList();
+        var account = appUserRepository.findByEmailIgnoreCaseAndActiveTrue(claims.getSubject());
+        if (account.isEmpty()) {
+            SecurityContextHolder.clearContext();
+            return;
+        }
+        // Neither stale JWT privileges nor a database promotion alone grant new token privileges.
+        String currentRole = "ROLE_" + account.get().getRole().name();
+        Object rawRoles = claims.get("roles");
+        var authorities = rawRoles instanceof List<?> roles && roles.contains(currentRole)
+                ? List.of(new SimpleGrantedAuthority(currentRole)) : List.<SimpleGrantedAuthority>of();
+        User principal = new User(account.get().getEmail(), "N/A", authorities);
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(principal, null, authorities));
     }
 }
-

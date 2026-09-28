@@ -1,6 +1,7 @@
 package org.thomcgn.backend.auth.service;
 
 import io.jsonwebtoken.Claims;
+import org.thomcgn.backend.auth.AuthenticationRejectedException;
 import io.jsonwebtoken.JwtException;
 import lombok.extern.slf4j.Slf4j;
 import lombok.RequiredArgsConstructor;
@@ -21,7 +22,6 @@ import org.thomcgn.backend.auth.domain.RevokedAccessToken;
 import org.thomcgn.backend.auth.repository.AppUserRepository;
 import org.thomcgn.backend.auth.repository.RefreshTokenRepository;
 import org.thomcgn.backend.auth.repository.RevokedAccessTokenRepository;
-import org.thomcgn.backend.common.exception.BadRequestException;
 import org.thomcgn.backend.common.exception.NotFoundException;
 
 import java.time.OffsetDateTime;
@@ -46,51 +46,53 @@ public class AuthService {
 
     @Transactional
     public LoginResponse login(LoginRequest request, ClientMetadata metadata) {
-        AppUser user = appUserRepository.findByEmailIgnoreCaseAndActiveTrue(request.email())
+        AppUser user = appUserRepository.lockByEmail(request.email()).filter(AppUser::isActive)
                 .orElseThrow(() -> {
                     meterRegistry.counter("auth.login.failure").increment();
-                    return new BadRequestException("Invalid credentials");
+                    return new AuthenticationRejectedException("Invalid credentials");
                 });
 
-        if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
+        if (request.password().getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 72
+                || !passwordEncoder.matches(request.password(), user.getPasswordHash())) {
             meterRegistry.counter("auth.login.failure").increment();
-            throw new BadRequestException("Invalid credentials");
+            throw new AuthenticationRejectedException("Invalid credentials");
         }
 
         meterRegistry.counter("auth.login.success").increment();
         return issueTokenPair(user, metadata);
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = AuthenticationRejectedException.class)
     public LoginResponse refresh(RefreshTokenRequest request, ClientMetadata metadata) {
         Claims claims = parseAndValidateRefreshClaims(request.refreshToken());
         String tokenId = claims.get(JwtTokenService.CLAIM_TOKEN_ID, String.class);
 
+        // Serialize all token mutations for the account, including replay revocation.
+        AppUser user = lockActiveUser(claims.getSubject());
         RefreshToken tokenById = refreshTokenRepository.findByTokenId(tokenId)
                 .orElseThrow(() -> {
                     meterRegistry.counter("auth.refresh.failure").increment();
-                    return new BadRequestException("Invalid refresh token");
+                    return new AuthenticationRejectedException("Invalid refresh token");
                 });
 
+        if (!tokenById.getUser().getId().equals(user.getId())) {
+            throw new AuthenticationRejectedException("Invalid refresh token");
+        }
         if (tokenById.getRevokedAt() != null) {
             revokeAllRefreshTokensForUser(tokenById.getUser());
             meterRegistry.counter("auth.refresh.replay_detected").increment();
-            log.warn("refresh_replay_detected user={} tokenId={}", tokenById.getUser().getEmail(), tokenId);
-            throw new BadRequestException("Refresh token reuse detected");
+            log.warn("refresh_replay_detected");
+            throw new AuthenticationRejectedException("Refresh token reuse detected");
         }
 
-        RefreshToken storedToken = refreshTokenRepository.findByTokenIdAndRevokedAtIsNull(tokenId)
-                .orElseThrow(() -> {
-                    meterRegistry.counter("auth.refresh.failure").increment();
-                    return new BadRequestException("Invalid refresh token");
-                });
+        RefreshToken storedToken = tokenById;
 
-        if (storedToken.getExpiresAt().isBefore(OffsetDateTime.now())) {
+        if (!storedToken.getExpiresAt().isAfter(OffsetDateTime.now())) {
             storedToken.setRevokedAt(OffsetDateTime.now());
             storedToken.setRevokedReason("EXPIRED");
             refreshTokenRepository.save(storedToken);
             meterRegistry.counter("auth.refresh.failure").increment();
-            throw new BadRequestException("Refresh token expired");
+            throw new AuthenticationRejectedException("Refresh token expired");
         }
 
         storedToken.setLastUsedAt(OffsetDateTime.now());
@@ -106,6 +108,7 @@ public class AuthService {
         Claims claims = parseAndValidateRefreshClaims(request.refreshToken());
         String tokenId = claims.get(JwtTokenService.CLAIM_TOKEN_ID, String.class);
 
+        lockActiveUser(claims.getSubject());
         refreshTokenRepository.findByTokenIdAndRevokedAtIsNull(tokenId)
                 .ifPresent(token -> {
                     token.setRevokedAt(OffsetDateTime.now());
@@ -139,7 +142,7 @@ public class AuthService {
 
     @Transactional
     public void revokeSession(String userEmail, Long sessionId) {
-        AppUser user = getActiveUserByEmail(userEmail);
+        AppUser user = lockActiveUser(userEmail);
         RefreshToken session = refreshTokenRepository.findByIdAndUserAndRevokedAtIsNull(sessionId, user)
                 .orElseThrow(() -> new NotFoundException("Session not found: " + sessionId));
         session.setRevokedAt(OffsetDateTime.now());
@@ -150,7 +153,7 @@ public class AuthService {
 
     @Transactional
     public void logoutAllSessions(String userEmail, String bearerAccessToken) {
-        AppUser user = getActiveUserByEmail(userEmail);
+        AppUser user = lockActiveUser(userEmail);
         OffsetDateTime now = OffsetDateTime.now();
         List<RefreshToken> activeSessions = refreshTokenRepository
                 .findByUserAndRevokedAtIsNullAndExpiresAtAfterOrderByCreatedAtDesc(user, now);
@@ -190,13 +193,18 @@ public class AuthService {
         try {
             claims = jwtTokenService.parseToken(refreshToken);
         } catch (JwtException | IllegalArgumentException exception) {
-            throw new BadRequestException("Invalid refresh token");
+            throw new AuthenticationRejectedException("Invalid refresh token");
         }
         String tokenType = claims.get(JwtTokenService.CLAIM_TOKEN_TYPE, String.class);
         if (!JwtTokenService.TOKEN_TYPE_REFRESH.equals(tokenType)) {
-            throw new BadRequestException("Invalid refresh token");
+            throw new AuthenticationRejectedException("Invalid refresh token");
         }
         return claims;
+    }
+
+    private AppUser lockActiveUser(String email) {
+        return appUserRepository.lockByEmail(email).filter(AppUser::isActive)
+                .orElseThrow(() -> new AuthenticationRejectedException("Invalid credentials"));
     }
 
     private AppUser getActiveUserByEmail(String userEmail) {
@@ -212,7 +220,7 @@ public class AuthService {
         try {
             Claims claims = parseAndValidateRefreshClaims(refreshToken);
             return claims.get(JwtTokenService.CLAIM_TOKEN_ID, String.class);
-        } catch (Exception ignored) {
+        } catch (AuthenticationRejectedException ignored) {
             return null;
         }
     }
@@ -259,7 +267,7 @@ public class AuthService {
                 revoked.setRevokedAt(OffsetDateTime.now());
                 revokedAccessTokenRepository.save(revoked);
             });
-        } catch (Exception ignored) {
+        } catch (JwtException | IllegalArgumentException ignored) {
             // Ignore malformed or expired access tokens during logout/revoke flows.
         }
     }

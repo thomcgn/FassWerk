@@ -47,28 +47,28 @@ public class TableOrderService {
     private final DrinkVariantRepository drinkVariantRepository;
     private final VolumePriceRepository volumePriceRepository;
     private final InventoryService inventoryService;
+    private final org.thomcgn.backend.common.persistence.BookingMutationLock bookingLock;
+    private final org.thomcgn.backend.reservation.application.ReservationTableUsage reservationUsage;
+    private final org.springframework.context.ApplicationEventPublisher events;
 
     @Transactional
     public TableOrderResponse open(OpenTableOrderRequest request) {
+        bookingLock.acquire();
         TableEntity table = tableRepository.findById(request.tableId())
                 .orElseThrow(() -> new NotFoundException("Table not found: " + request.tableId()));
 
-        orderRepository.findFirstByTableIdAndStatus(table.getId(), TableOrderStatus.OPEN)
-                .ifPresent(existing -> {
-                    throw new ConflictException("Table already has an open order: " + existing.getId());
-                });
+        if (!table.isActive()) throw new ConflictException("Table is inactive");
+        if (orderRepository.hasUnsettledOrders(table.getId()))
+            throw new ConflictException("Table has an open or unpaid bill");
+        if (request.reservationId() != null)
+            throw new ConflictException("Use reservation check-in to open its table bills");
+        reservationUsage.assertWalkInAvailable(table.getId());
 
         TableOrder order = new TableOrder();
         order.setTable(table);
         order.setStatus(TableOrderStatus.OPEN);
         order.setPaid(false);
         order.setOpenedAt(LocalDateTime.now());
-
-        if (request.reservationId() != null) {
-            Reservation reservation = reservationRepository.findById(request.reservationId())
-                    .orElseThrow(() -> new NotFoundException("Reservation not found: " + request.reservationId()));
-            order.setReservation(reservation);
-        }
 
         table.setStatus(TableStatus.OCCUPIED);
         tableRepository.save(table);
@@ -78,6 +78,7 @@ public class TableOrderService {
 
     @Transactional
     public TableOrderResponse addItem(Long orderId, AddTableOrderItemRequest request) {
+        bookingLock.acquire();
         TableOrder order = getOpenOrder(orderId);
         DrinkVariant variant = drinkVariantRepository.findById(request.drinkVariantId())
                 .orElseThrow(() -> new NotFoundException("Drink variant not found: " + request.drinkVariantId()));
@@ -123,6 +124,7 @@ public class TableOrderService {
 
     @Transactional
     public TableOrderResponse removeItem(Long orderId, Long itemId) {
+        bookingLock.acquire();
         TableOrder order = getOpenOrder(orderId);
         TableOrderItem item = itemRepository.findById(itemId)
                 .orElseThrow(() -> new NotFoundException("Table order item not found: " + itemId));
@@ -152,27 +154,27 @@ public class TableOrderService {
 
     @Transactional
     public TableOrderResponse close(Long orderId) {
+        bookingLock.acquire();
         TableOrder order = getOpenOrder(orderId);
         order.setStatus(TableOrderStatus.CLOSED);
         order.setPaid(true);
         order.setClosedAt(LocalDateTime.now());
 
-        TableEntity table = order.getTable();
-        table.setStatus(TableStatus.FREE);
-        tableRepository.save(table);
-
-        return toResponse(orderRepository.save(order));
+        orderRepository.saveAndFlush(order);
+        releaseAfterPayment(order);
+        return toResponse(order);
     }
 
     @Transactional
     public TableOrderResponse markUnpaid(Long orderId) {
+        bookingLock.acquire();
         TableOrder order = getOpenOrder(orderId);
         order.setStatus(TableOrderStatus.CLOSED);
         order.setPaid(false);
         order.setClosedAt(LocalDateTime.now());
 
         TableEntity table = order.getTable();
-        table.setStatus(TableStatus.FREE);
+        table.setStatus(TableStatus.OCCUPIED);
         tableRepository.save(table);
 
         return toResponse(orderRepository.save(order));
@@ -180,6 +182,7 @@ public class TableOrderService {
 
     @Transactional
     public TableOrderResponse reopenUnpaid(Long orderId) {
+        bookingLock.acquire();
         TableOrder order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new NotFoundException("Table order not found: " + orderId));
 
@@ -266,6 +269,7 @@ public class TableOrderService {
 
     @Transactional
     public SplitTableOrderPaymentResponse splitPayment(Long orderId, SplitTableOrderPaymentRequest request) {
+        bookingLock.acquire();
         TableOrder openOrder = getOpenOrder(orderId);
         if (request.items() == null || request.items().isEmpty()) {
             throw new BadRequestException("Split payment requires at least one item");
@@ -290,6 +294,8 @@ public class TableOrderService {
             if (existingItem == null) {
                 throw new BadRequestException("Table order item not found on open order: " + splitEntry.getKey());
             }
+            if (splitEntry.getValue() == null || splitEntry.getValue() < 1)
+                throw new BadRequestException("Split quantity must be positive");
             if (splitEntry.getValue() > existingItem.getQuantity()) {
                 throw new BadRequestException("Split quantity exceeds existing quantity for item: " + splitEntry.getKey());
             }
@@ -342,11 +348,8 @@ public class TableOrderService {
             openOrder.setStatus(TableOrderStatus.CLOSED);
             openOrder.setPaid(true);
             openOrder.setClosedAt(now);
-            tableRepository.findById(openOrder.getTable().getId()).ifPresent(table -> {
-                table.setStatus(TableStatus.FREE);
-                tableRepository.save(table);
-            });
-            persistedOpenOrder = orderRepository.save(openOrder);
+            persistedOpenOrder = orderRepository.saveAndFlush(openOrder);
+            releaseAfterPayment(persistedOpenOrder);
         }
 
         return new SplitTableOrderPaymentResponse(
@@ -367,6 +370,14 @@ public class TableOrderService {
         TableOrder order = orderRepository.findFirstByTableIdAndStatus(tableId, TableOrderStatus.OPEN)
                 .orElseThrow(() -> new NotFoundException("Open table order not found for table: " + tableId));
         return toResponse(order);
+    }
+
+    private void releaseAfterPayment(TableOrder order) {
+        var table = order.getTable();
+        table.setStatus(orderRepository.hasUnsettledOrders(table.getId()) ? TableStatus.OCCUPIED : TableStatus.FREE);
+        tableRepository.save(table);
+        events.publishEvent(new org.thomcgn.backend.billing.application.TableOrderPaid(
+                order.getReservation() == null ? null : order.getReservation().getId()));
     }
 
     private TableOrder getOpenOrder(Long orderId) {

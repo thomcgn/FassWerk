@@ -14,6 +14,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -54,8 +55,26 @@ public class ReservationController {
     public List<ReservationResponse> list(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date
     ) {
-        LocalDate effectiveDate = date != null ? date : LocalDate.now();
-        return reservationService.listByDate(effectiveDate).stream().map(reservationMapper::toResponse).toList();
+        return reservationService.listByDate(date).stream().map(reservationMapper::toResponse).toList();
+    }
+
+    @GetMapping("/settings")
+    @Operation(summary = "Oeffentliche Buchungsregeln und lokale Zeit laden")
+    public ReservationService.SettingsResponse settings() {
+        return reservationService.settings();
+    }
+
+    @PutMapping("/{id}")
+    @Operation(summary = "Reservierung mit erneuter Kapazitaetspruefung aendern")
+    @SecurityRequirement(name = "bearerAuth")
+    public ReservationResponse update(@PathVariable Long id, @Valid @RequestBody CreateReservationRequest request) {
+        return reservationMapper.toResponse(reservationService.update(id, request));
+    }
+
+    @PostMapping("/{id}/complete")
+    @SecurityRequirement(name = "bearerAuth")
+    public ReservationResponse complete(@PathVariable Long id) {
+        return reservationMapper.toResponse(reservationService.complete(id));
     }
 
     @GetMapping("/{id}")

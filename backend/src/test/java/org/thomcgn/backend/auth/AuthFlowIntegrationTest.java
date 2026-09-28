@@ -85,7 +85,7 @@ class AuthFlowIntegrationTest extends PostgresIntegrationTest {
         assertEquals(204, logoutResponse.statusCode());
 
         HttpResponse<String> afterLogout = send("GET", "/api/inventory", null, accessToken);
-        assertEquals(403, afterLogout.statusCode());
+        assertEquals(401, afterLogout.statusCode());
     }
 
     @Test
@@ -100,7 +100,7 @@ class AuthFlowIntegrationTest extends PostgresIntegrationTest {
         String rotatedRefreshToken = extractString(firstRefresh.body(), "refreshToken");
 
         HttpResponse<String> oldRefreshAgain = send("POST", "/api/auth/refresh", refreshBody, null);
-        assertEquals(400, oldRefreshAgain.statusCode());
+        assertEquals(401, oldRefreshAgain.statusCode());
 
         HttpResponse<String> rotatedRefresh = send(
                 "POST",
@@ -108,7 +108,7 @@ class AuthFlowIntegrationTest extends PostgresIntegrationTest {
                 "{\"refreshToken\":\"" + rotatedRefreshToken + "\"}",
                 null
         );
-        assertEquals(200, rotatedRefresh.statusCode());
+        assertEquals(401, rotatedRefresh.statusCode());
     }
 
     @Test

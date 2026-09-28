@@ -12,5 +12,7 @@ public record SessionResponse(
         String ipAddress,
         boolean current
 ) {
+    @Override
+    public String toString() { return "SessionResponse[REDACTED]"; }
 }
 

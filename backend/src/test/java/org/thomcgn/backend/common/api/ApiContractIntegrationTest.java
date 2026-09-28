@@ -45,6 +45,11 @@ class ApiContractIntegrationTest extends PostgresIntegrationTest {
         admin.setEmail("api@example.test");
         admin.setRole(UserRole.ADMIN);
         admin.setActive(true);
+        jdbc.update("""
+                insert into app_users(name,email,password_hash,role,active)
+                values('API test','api@example.test','not-a-login-hash','ADMIN',true)
+                on conflict(email) do update set role='ADMIN', active=true
+                """);
         accessToken = tokens.createAccessToken(admin).token();
         jdbc.execute("truncate table drink_categories, inventory_items, suppliers, tables restart identity cascade");
         jdbc.update("insert into drink_categories(name,sort_order,active) values('API category',0,true)");
@@ -76,7 +81,7 @@ class ApiContractIntegrationTest extends PostgresIntegrationTest {
             "GET|/api/inventory/sales/daily?startDate=invalid&endDate=2035-01-01|400",
             "GET|/api/inventory/abc/reorder-calculation|400",
             "PATCH|/api/tables|405",
-            "GET|/api/does-not-exist|404",
+            "GET|/api/does-not-exist|403",
             "GET|/api/reservations/999999|404",
             "GET|/api/inventory/1/reorder-calculations/history?limit=-1|400",
             "GET|/api/inventory/sales/weekly/1?weeks=0|400",
@@ -148,9 +153,9 @@ class ApiContractIntegrationTest extends PostgresIntegrationTest {
     }
 
     @Test
-    void malformedRefreshTokenIs400WithoutTokenEcho() throws Exception {
+    void malformedRefreshTokenIs401WithoutTokenEcho() throws Exception {
         var response = send("POST", "/api/auth/refresh", "{\"refreshToken\":\"private-invalid-token\"}", "application/json");
-        assertError(response, 400);
+        assertError(response, 401);
         assertThat(response.body()).doesNotContain("private-invalid-token");
     }
 

@@ -137,7 +137,7 @@ export function TableDetailModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2 md:p-4">
+    <div role="dialog" aria-modal="true" aria-label="Tischdetail" className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2 md:p-4">
       <Card className="w-full max-w-4xl max-h-[92vh] overflow-y-auto">
         <CardHeader className="sticky top-0 flex flex-row items-center justify-between bg-[color:var(--color-surface)] border-b">
           <div>

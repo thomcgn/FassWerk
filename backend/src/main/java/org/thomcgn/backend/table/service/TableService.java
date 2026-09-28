@@ -16,6 +16,9 @@ import java.util.List;
 public class TableService {
 
     private final TableRepository tableRepository;
+    private final org.thomcgn.backend.reservation.application.ReservationBilling billing;
+    private final org.thomcgn.backend.common.persistence.BookingMutationLock bookingLock;
+    private final org.thomcgn.backend.reservation.application.ReservationTableUsage reservationUsage;
 
     @Transactional(readOnly = true)
     public List<TableResponse> list() {
@@ -24,6 +27,7 @@ public class TableService {
 
     @Transactional
     public TableResponse create(TableRequest request) {
+        bookingLock.acquire();
         TableEntity table = new TableEntity();
         apply(table, request);
         return toResponse(tableRepository.save(table));
@@ -31,8 +35,14 @@ public class TableService {
 
     @Transactional
     public TableResponse update(Long id, TableRequest request) {
+        bookingLock.acquire();
         TableEntity table = tableRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Table not found: " + id));
+        if (((request.seats() != null && !java.util.Objects.equals(table.getSeats(), request.seats()))
+                || !java.util.Objects.equals(table.getArea(), request.area())
+                || table.isActive() != request.active() || table.getStatus() != request.status()) && reservationUsage.hasCurrentOrFutureHold(id)) {
+            throw new org.thomcgn.backend.common.exception.ConflictException("Table has active reservations; reassign or cancel them before changing capacity, area or availability");
+        }
         apply(table, request);
         return toResponse(tableRepository.save(table));
     }
@@ -42,10 +52,11 @@ public class TableService {
         table.setArea(request.area());
         table.setStatus(request.status());
         table.setActive(request.active());
+        if (request.seats() != null) table.setSeats(request.seats());
     }
 
     private TableResponse toResponse(TableEntity table) {
-        return new TableResponse(table.getId(), table.getName(), table.getArea(), table.getStatus(), table.isActive());
+        return new TableResponse(table.getId(), table.getName(), table.getArea(), billing.occupiedTableIds().contains(table.getId()) ? org.thomcgn.backend.table.domain.TableStatus.OCCUPIED : table.getStatus(), table.isActive(), table.getSeats());
     }
 }
 

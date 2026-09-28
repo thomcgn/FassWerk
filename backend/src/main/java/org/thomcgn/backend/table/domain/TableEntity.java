@@ -28,5 +28,8 @@ public class TableEntity extends BaseEntity {
 
     @Column(nullable = false)
     private boolean active;
+
+    @Column
+    private Integer seats;
 }
 

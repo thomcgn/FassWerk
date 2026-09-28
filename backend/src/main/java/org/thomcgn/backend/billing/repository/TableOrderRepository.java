@@ -12,6 +12,14 @@ import java.util.Optional;
 
 public interface TableOrderRepository extends JpaRepository<TableOrder, Long> {
 
+    List<TableOrder> findAllByReservationId(Long reservationId);
+
+    @Query("select distinct o.table.id from TableOrder o where o.status = org.thomcgn.backend.billing.domain.TableOrderStatus.OPEN or o.paid = false")
+    List<Long> findOccupiedTableIds();
+
+    @Query("select count(o) > 0 from TableOrder o where o.table.id = :tableId and (o.status = org.thomcgn.backend.billing.domain.TableOrderStatus.OPEN or o.paid = false)")
+    boolean hasUnsettledOrders(@Param("tableId") Long tableId);
+
     Optional<TableOrder> findFirstByTableIdAndStatus(Long tableId, TableOrderStatus status);
 
     List<TableOrder> findAllByStatusAndClosedAtBetween(TableOrderStatus status, LocalDateTime start, LocalDateTime end);

@@ -112,6 +112,11 @@ export async function mockReservationBootstrap(page: Page, reservations: unknown
   });
 
   await page.route("**/api/reservations**", async (route: Route) => {
+    if (new URL(route.request().url()).pathname.endsWith("/settings")) {
+      await json(route, { today: stableIsoTimestamp().slice(0, 10), timezone: "Europe/Berlin", durationMinutes: null,
+        graceMinutes: 30, intervalMinutes: 30, mode: "FIXED", openingHours: [] });
+      return;
+    }
     if (route.request().method() === "GET") {
       await json(route, reservations);
       return;
@@ -572,7 +577,7 @@ export async function mockFlowApis(page: Page, state: FlowState) {
     order.status = "CLOSED";
     order.paid = false;
     order.closedAt = stableIsoTimestamp();
-    setTableStatus(state, order.tableId, "FREE");
+    setTableStatus(state, order.tableId, "OCCUPIED");
     await json(route, cloneOrder(order));
   });
 

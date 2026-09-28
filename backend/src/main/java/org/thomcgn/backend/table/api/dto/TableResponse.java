@@ -7,7 +7,8 @@ public record TableResponse(
         String name,
         String area,
         TableStatus status,
-        boolean active
+        boolean active,
+        Integer seats
 ) {
 }
 

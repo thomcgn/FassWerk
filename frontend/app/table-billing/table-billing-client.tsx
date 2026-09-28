@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Receipt } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { TableCapacityEditor } from "@/components/table-capacity-editor";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -85,7 +86,7 @@ export default function TableBillingClient() {
     if (typeof window === "undefined") return todayIsoDate();
     return window.sessionStorage.getItem(BUSINESS_DATE_STORAGE_KEY) ?? todayIsoDate();
   });
-  const actionableTables = tables.filter((table) => table.status !== "FREE");
+  const actionableTables = tables;
 
   useToastFeedback(error, "error");
   useToastFeedback(status, "success");
@@ -227,6 +228,7 @@ export default function TableBillingClient() {
     function refreshArchiveOnReturn() {
       if (document.visibilityState === "visible") {
         void loadUnpaidArchive();
+        void loadMeta();
       }
     }
 
@@ -236,7 +238,7 @@ export default function TableBillingClient() {
       window.removeEventListener("focus", refreshArchiveOnReturn);
       document.removeEventListener("visibilitychange", refreshArchiveOnReturn);
     };
-  }, [loadUnpaidArchive]);
+  }, [loadUnpaidArchive, loadMeta]);
 
   async function openOrLoadTable(table: Table) {
     setError(null);
@@ -256,6 +258,12 @@ export default function TableBillingClient() {
     if (openResponse.status !== 404) {
       const payload = (await openResponse.json().catch(() => ({}))) as { message?: string };
       setError(payload.message ?? "Tisch konnte nicht geladen werden.");
+      return;
+    }
+
+    const unpaid = unpaidArchive.find(entry => entry.tableId === table.id);
+    if (unpaid) {
+      await fetchOrderById(String(unpaid.id));
       return;
     }
 
@@ -459,7 +467,7 @@ export default function TableBillingClient() {
       body: JSON.stringify({
         name: newTableName.trim(),
         area: newTableArea,
-        status: "OCCUPIED",
+        status: "FREE",
         active: true,
       }),
     });
@@ -618,10 +626,12 @@ export default function TableBillingClient() {
         </Card>
       </section>
 
+      <TableCapacityEditor tables={tables} onSaved={loadMeta} />
+
       <Card>
         <CardHeader>
           <CardTitle>Aktive Tische</CardTitle>
-          <CardDescription>Es werden nur Tische mit aktivem Vorgang angezeigt; bezahlte oder zurückgestellte Bons verschwinden aus dieser Übersicht.</CardDescription>
+          <CardDescription>Freie Tische koennen erneut geoeffnet werden. Belegte Tische bleiben bis zur vollstaendigen Bezahlung gesperrt, auch bei unbezahlten archivierten Bons.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
           {actionableTables.map((table) => (

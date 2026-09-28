@@ -1,6 +1,7 @@
 package org.thomcgn.backend.auth;
 
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import lombok.RequiredArgsConstructor;
@@ -67,12 +68,18 @@ public class JwtTokenService {
     }
 
     public Claims parseToken(String token) {
-        return Jwts.parser()
+        Claims claims = Jwts.parser()
                 .verifyWith(signingKey())
                 .requireIssuer(jwtProperties.issuer())
                 .build()
                 .parseSignedClaims(token)
                 .getPayload();
+        if (claims.getExpiration() == null || claims.getIssuedAt() == null
+                || claims.getSubject() == null || claims.getSubject().isBlank()
+                || claims.getId() == null || claims.getId().isBlank()) {
+            throw new JwtException("Required token claims missing");
+        }
+        return claims;
     }
 
     private SecretKey signingKey() {

@@ -9,6 +9,8 @@ spring:
     connect-retries: 0
 
 app:
+  reservation:
+    no-show-cron: "-"
   bootstrap:
     admin-email: ""
     admin-password: ""

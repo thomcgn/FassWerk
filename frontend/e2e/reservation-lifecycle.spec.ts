@@ -45,6 +45,8 @@ test("reservierung: PENDING -> CONFIRMED/REJECTED -> CHECKED_IN", async ({ page 
 
   await annaCard.getByRole("button", { name: "Check-in" }).click();
   await expect(annaCard.getByRole("button", { name: "Check-in" })).toHaveCount(0);
+  await expect(annaCard.getByRole("button", { name: "Abschliessen" })).toHaveCount(0);
+  await expect(annaCard.getByText("Tische bleiben bis zur Bezahlung belegt.")).toBeVisible();
 
   await benCard.getByRole("button", { name: "Ablehnen" }).click();
   await page.locator("textarea").fill("Slot intern nicht verfügbar");
@@ -55,3 +57,38 @@ test("reservierung: PENDING -> CONFIRMED/REJECTED -> CHECKED_IN", async ({ page 
 });
 
 
+
+test("QR navigation does not check in; staff explicitly confirms", async ({ page }) => {
+  await mockAuthenticatedSession(page);
+  let scans = 0;
+  let checkIns = 0;
+  await page.route("**/api/reservations/scan/group-token", async route => {
+    expect(route.request().method()).toBe("POST");
+    scans++;
+    await route.fulfill({ json: { reservationId: 301, guestName: "Group of six", reservationDate: todayIsoDate(), reservationTime: "18:00", status: "CONFIRMED", checkInAllowed: true } });
+  });
+  await page.route("**/api/reservations/301/check-in", async route => {
+    expect(route.request().method()).toBe("POST");
+    checkIns++;
+    await route.fulfill({ json: { status: "CHECKED_IN" } });
+  });
+  await page.goto("/bookings/scan/group-token");
+  await expect(page.getByRole("button", { name: "Reservierung pruefen" })).toBeVisible();
+  expect(scans).toBe(0);
+  expect(checkIns).toBe(0);
+  await page.getByRole("button", { name: "Reservierung pruefen" }).click();
+  await expect(page.getByText(/Group of six/)).toBeVisible();
+  expect(checkIns).toBe(0);
+  await page.getByRole("button", { name: "Check-in bestaetigen" }).click();
+  await expect(page.getByRole("status")).toHaveText("Check-in erfolgreich.");
+  expect(checkIns).toBe(1);
+});
+
+test("QR scan authorization failure reveals no reservation", async ({ page }) => {
+  await mockAuthenticatedSession(page);
+  await page.route("**/api/reservations/scan/denied-token", route => route.fulfill({ status: 403, json: {} }));
+  await page.goto("/bookings/scan/denied-token");
+  await page.getByRole("button", { name: "Reservierung pruefen" }).click();
+  await expect(page.getByRole("status")).toContainText("Bitte als Teammitglied anmelden");
+  await expect(page.getByRole("button", { name: "Check-in bestaetigen" })).toHaveCount(0);
+});

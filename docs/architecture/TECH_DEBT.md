@@ -172,3 +172,56 @@ Einfuehrung oder REST-Vertragsaenderung. Details und Gate-Ergebnisse:
 
 Details: [API_LAYER_REVIEW.md](API_LAYER_REVIEW.md),
 [PHASE_5_REPORT.md](PHASE_5_REPORT.md). Keine neuen Dependencies oder Migrationen.
+
+## Fortschritt nach Phase 6 (2026-09-27)
+
+| ID | Status nach Phase 6 |
+| --- | --- |
+| TD-006 | Explizite serverseitige Rollenmatrix und deny-all-Fallback. Nutzerentscheidung umgesetzt: neue Rolle BARCHEF neben ADMIN fuer Lieferanten-/Nachbestellverwaltung, Berechnung und manuellen Tagesabschluss. Dynamischer HTTP-Test prueft die registrierten Fach-Endpunkte fuer anonym, unbekannte Rolle, STAFF, BARCHEF und ADMIN. |
+| TD-007 | Replay-Widerruf wird durch dedizierte Auth-Exception mit enger noRollbackFor-Regel committed; Nachfolgetoken nach Replay unbrauchbar. Andere Persistenzfehler rollen Rotation weiterhin zurueck. |
+| TD-008 | Refresh-Konkurrenzdefekt behoben: accountbezogener PostgreSQL-Lock, ein Nachfolger, Replay widerruft ihn. Der fruehere knownGap-Test ist ein Soll-Regressionstest. Die vier anderen Konkurrenzdefekte bleiben offen. |
+| TD-018 | Backend liefert jetzt 401 bei ungueltiger Authentifizierung; BFF reagiert darauf und koordiniert Refresh pro Prozess. Mehrere Instanzen/verspaetete Requests/Logout-Rennen bleiben offen; keine clusterweite Garantie. |
+| TD-025 | Secret-/Session-DTO-toString redigiert, Replay ohne E-Mail/JTI und Mailfehler ohne Empfaenger/Exceptiontext. Beliebige DEBUG-/TRACE-/Bind-/Proxy-Logs und fehlende sichere Serverfehlerdiagnose bleiben Betriebsrisiken. |
+| TD-023 | JWT-Negativfaelle, Rollen inkl. BARCHEF, aktives Konto/Rollenwechsel, Sessionownership, Replay/Rollback, Actuator/CORS, BFF-CSRF/Header und neue Rollen-Migration abgedeckt. |
+| TD-034 | Request-ID laeuft jetzt vor Security und steht auch in 401/403/503 zur Verfuegung. Prometheus-Registry/strukturierte Logs bleiben offen. |
+
+Neue explizite Restbefunde aus dem Security Review:
+
+| ID | Severity | Bereich | Problem | Risiko | Vorgeschlagene Loesung |
+| --- | --- | --- | --- | --- | --- |
+| TD-035 | P1 | Auth-Abuse | Kein instanzuebergreifender Rate Limiter fuer Login/Refresh; frueher Unknown-User-Pfad zeigt Timingunterschied. | Credential Stuffing, Ressourcenverbrauch und Kontenaufklaerung. | Vor oeffentlichem Betrieb IP-/Account-Limits, progressive Verzoegerung und Monitoring am vertrauenswuerdigen Gateway bzw. gemeinsamen Store; keine fremd ausloesbare permanente Kontosperre. |
+| TD-036 | P1 | Access-Revocation | Andere bereits ausgegebene Access-JTIs sind nicht an die widerrufene Session gebunden. | Session-/Logout-all-/Replay-Widerruf beendet Refresh, aber nicht sofort jedes Access-Token (Default 120 Minuten). | Sessionbindung/Tokenversionierung und Tests fuer sofortige Gesamtwiderrufe; Policy fuer Lebenszeiten festlegen. |
+| TD-037 | P1 | BFF-Concurrency | Refresh-Coalescing nur pro Prozess, 3 Sekunden, maximal 256 Eintraege. | Cluster-/verspaetete Requests und Logout/Refresh-Rennen koennen erneute Anmeldung erfordern. | Vor horizontaler Skalierung gemeinsame Sessionkoordination; keine Lockerung der Backend-Replay-Pruefung. |
+
+BFF-Herkunftspruefung und Sicherheitsheader wurden ergaenzt; APP_ORIGIN muss hinter
+Reverse Proxys zur oeffentlichen HTTPS-Origin passen. Alte Migrationen unveraendert;
+nur V22 neu. Keine produktiven Benutzerzuweisungen vorgenommen.
+Details: [SECURITY_REVIEW.md](SECURITY_REVIEW.md), [PHASE_6_REPORT.md](PHASE_6_REPORT.md).
+
+## Phase 7 Follow-up
+
+- Reservation concurrency, whole-stay overlap, missed no-shows and terminal-state
+  mutation gaps are addressed by centralized rules and PostgreSQL-backed tests.
+- Operations prerequisite: seats must be configured; future legacy reservations
+  need explicit revalidation. V23 deliberately does not guess capacity or time zone.
+- Reservation allocation uses a coarse per-database advisory lock and loads active
+  reservations. Future multi-venue/high-throughput support needs scoped locking and
+  bounded interval queries.
+- Same-area table grouping does not establish physical adjacency.
+- Reservation/billing/walk-in occupancy integration remains Phase 8 work.
+- Decision mail is after-commit best effort; durable outbox/retries remain open.
+- Previously printed backend-origin QR URLs may require reverse-proxy redirects.
+- Existing dependency vulnerabilities and five unrelated frontend lint warnings
+  are not resolved by this reservation phase.
+
+## Payment-bound Occupancy Follow-up
+
+Supersedes the Phase 7 reservation/billing/walk-in integration gap: check-in now
+opens bills and full payment releases each table atomically. Duplicate-open and
+parallel split-payment characterization tests now assert correctness. The remaining
+stock-adjustment lost-update characterization is still Phase 8 work.
+V24 rejects historical duplicate OPEN bills without deleting data. Legacy future
+turnover bookings and checked-in groups lacking linked bills require operator review.
+A conservative one-unresolved-booking-per-business-date policy replaces guessed
+stay lengths. Global serialization now includes all bill mutations; scalability
+and independent inventory adjustment concurrency remain explicit limitations.

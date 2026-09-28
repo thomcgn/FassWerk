@@ -298,3 +298,39 @@ Neue DTO-Constraints gehoeren zum Inventory-API-Vertrag.
 Keine neue kontextuebergreifende Entity- oder Repositoryabhaengigkeit eingefuehrt.
 Details zu allen neun Controllern, Erfolgscodes und bewusst beibehaltenem
 Fehlerformat: [API_LAYER_REVIEW.md](API_LAYER_REVIEW.md).
+
+## Phase-6-Fortschritt: Identity & Access
+
+BARCHEF ist ein Rollenwert, kein neuer fachlicher Kontext. Identity & Access besitzt
+JWT-Pflichtclaims, aktive Kontopruefung, accountbezogene Token-Sperren, Rotation,
+Replay und Sessionwiderruf. V22 begrenzt bestehende Rollentexte auf die drei
+unterstuetzten Werte; keine Konten werden angelegt oder befoerdert.
+
+SecurityConfig besitzt die verbindliche serverseitige Rollenmatrix; die neue Rolle
+darf die vom Nutzer freigegebenen Inventory-Verwaltungsaktionen ausfuehren.
+SecurityErrorResponseWriter und RequestCorrelationFilter bleiben technische Adapter.
+Der Next-Proxy schuetzt den Cookie-Eingang durch Origin-Pruefung, waehrend das
+Backend weiter explizite Bearer-Authentifizierung und fachliche Rollen erzwingt.
+
+BFF-Refresh-Koordination ist eine prozesslokale Adapterfunktion und kein Ersatz
+fuer serverseitige Tokeninvarianten. Grenzen, Restgueltigkeit anderer Access-Tokens
+und offene Rate-/Clusterfragen: [SECURITY_REVIEW.md](SECURITY_REVIEW.md).
+
+## Phase 7: Reservation Boundary
+
+`ReservationRules` centralizes opening windows, intervals, business dates and
+multi-table allocation. `ReservationService` owns atomic lifecycle transitions,
+snapshot persistence and after-commit notification events. The table service
+queries the `ReservationTableUsage` application port before changing held capacity.
+Both use `BookingMutationLock`; React/BFF have no independent availability rules.
+See `RESERVATION_RULES.md` for invariants and rollout requirements.
+
+## Payment-bound Reservation Occupancy (Phase 7 Follow-up)
+
+The original 180-minute model is superseded: `ReservationRules` provides a fixed
+30-minute no-show deadline but no stay limit. `ReservationBilling` is the application
+port into billing; its adapter creates group table bills during the check-in transaction.
+`TableOrderPaid` is a synchronous in-transaction event completing a group only when
+all its tables are paid. Per-table release permits reuse before the whole group
+finishes. Walk-in, reservation and billing writers share `BookingMutationLock`.
+See the updated `RESERVATION_RULES.md`; this is not a full Phase 8 completion.

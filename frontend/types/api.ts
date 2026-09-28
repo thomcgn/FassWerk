@@ -61,7 +61,7 @@ export type SessionResponse = {
   current: boolean;
 };
 
-export type ReservationStatus = "PENDING" | "CONFIRMED" | "CHECKED_IN" | "REJECTED" | "CANCELLED" | "NO_SHOW";
+export type ReservationStatus = "PENDING" | "CONFIRMED" | "CHECKED_IN" | "REJECTED" | "CANCELLED" | "NO_SHOW" | "EXPIRED" | "COMPLETED";
 
 export type Reservation = {
   id: number;
@@ -76,6 +76,12 @@ export type Reservation = {
   checkedInAt: string | null;
   qrCodeToken: string;
   qrScanUrl: string;
+  assignedTableIds?: number[];
+  durationMinutes?: number | null;
+  startsAt?: string | null;
+  endsAt?: string | null;
+  businessDate?: string | null;
+  timezone?: string | null;
 };
 
 export type CreateReservationRequest = {
@@ -90,6 +96,7 @@ export type CreateReservationRequest = {
 export type TableStatus = "FREE" | "OCCUPIED" | "RESERVED" | "READY_FOR_PAYMENT";
 
 export type Table = {
+  seats?: number | null;
   id: number;
   name: string;
   area: string | null;
@@ -279,3 +286,14 @@ export type SalesConfiguration = {
   effectiveBusinessDate: string;
 };
 
+
+
+export type ReservationSettings = {
+  today: string;
+  timezone: string;
+  durationMinutes: number | null;
+  graceMinutes: number;
+  intervalMinutes: number;
+  mode: "FIXED" | "FLEXIBLE";
+  openingHours: { weekday: string; open: boolean; from: string | null; to: string | null; secondFrom: string | null; secondTo: string | null }[];
+};
