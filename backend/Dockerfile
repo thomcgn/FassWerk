@@ -1,4 +1,4 @@
-FROM maven:3.9.10-eclipse-temurin-21@sha256:193ed19a4806b4bbad65b2e8a2a9bbf901b6e216eb0d5761c70c2c4537cd53d7 AS build
+FROM maven:3.9.15-eclipse-temurin-26@sha256:029a8e2838ae68238ffb8be407cddbb3f07d4d839c60c6f26c619a69fd184531 AS build
 WORKDIR /workspace
 
 COPY pom.xml .
