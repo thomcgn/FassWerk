@@ -16,7 +16,7 @@ class LegacyTableTextMigrationTest extends MigratedPostgresTest {
         try (var connection = databaseConnection(); var sql = connection.createStatement()) {
             sql.execute("insert into tables(name,area,status,active) values('Terrasse','Garten','FREE',true)");
             sql.execute("alter table tables alter column " + column + " type bytea using convert_to(" + column + ", 'UTF8')");
-            assertThat(migration("latest").migrate().migrationsExecuted).isEqualTo(8);
+            assertThat(migration("latest").migrate().migrationsExecuted).isEqualTo(11);
             try (var rows = sql.executeQuery("select name,area,pg_typeof(" + column + ")::text from tables")) {
                 assertThat(rows.next()).isTrue();
                 assertThat(rows.getString(1)).isEqualTo("Terrasse");

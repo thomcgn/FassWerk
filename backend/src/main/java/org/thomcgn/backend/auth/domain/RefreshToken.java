@@ -21,6 +21,17 @@ public class RefreshToken extends BaseEntity {
     @Column(nullable = false, unique = true)
     private String tokenId;
 
+    @Column(nullable = false)
+    private String familyId;
+
+    @Column(nullable = false)
+    private boolean browserSession;
+
+    @jakarta.persistence.PrePersist
+    void initializeFamily() {
+        if (familyId == null) familyId = tokenId;
+    }
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     private AppUser user;

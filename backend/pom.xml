@@ -21,7 +21,6 @@
         <java.version>21</java.version>
         <!-- Security fix newer than the Boot 4.0.8 BOM; remove when Boot manages >= 11.0.25. -->
         <tomcat.version>11.0.25</tomcat.version>
-        <mapstruct.version>1.6.3</mapstruct.version>
         <jjwt.version>0.12.7</jjwt.version>
         <zxing.version>3.5.3</zxing.version>
         <pdfbox.version>3.0.4</pdfbox.version>
@@ -136,13 +135,6 @@
             <version>${pdfbox.version}</version>
         </dependency>
 
-        <!-- Mapping -->
-        <dependency>
-            <groupId>org.mapstruct</groupId>
-            <artifactId>mapstruct</artifactId>
-            <version>${mapstruct.version}</version>
-        </dependency>
-
         <!-- Lombok -->
         <dependency>
             <groupId>org.projectlombok</groupId>
@@ -192,20 +184,7 @@
                             <groupId>org.projectlombok</groupId>
                             <artifactId>lombok</artifactId>
                         </path>
-                        <path>
-                            <groupId>org.mapstruct</groupId>
-                            <artifactId>mapstruct-processor</artifactId>
-                            <version>${mapstruct.version}</version>
-                        </path>
-                        <path>
-                            <groupId>org.projectlombok</groupId>
-                            <artifactId>lombok-mapstruct-binding</artifactId>
-                            <version>0.2.0</version>
-                        </path>
                     </annotationProcessorPaths>
-                    <compilerArgs>
-                        <arg>-Amapstruct.defaultComponentModel=spring</arg>
-                    </compilerArgs>
                 </configuration>
             </plugin>
 

@@ -63,7 +63,7 @@ class TableOrderServiceArchiveFilterTest {
         tableOrderService.searchArchive(LocalDate.of(2035, 1, 1), "T1", "UNPAID");
 
         verify(orderRepository).searchUnpaidArchive(TableOrderStatus.CLOSED, "T1");
-        verify(orderRepository, never()).searchArchive(eq(TableOrderStatus.CLOSED), any(LocalDateTime.class), any(LocalDateTime.class), any(), any());
+        verify(orderRepository, never()).searchArchive(eq(TableOrderStatus.CLOSED), any(LocalDate.class), any(LocalDateTime.class), any(LocalDateTime.class), any(), any());
     }
 
     @Test

@@ -3575,7 +3575,9 @@ export interface operations {
     removeItem: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "Idempotency-Key"?: string;
+            };
             path: {
                 id: number;
                 itemId: number;

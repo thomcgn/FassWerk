@@ -26,6 +26,7 @@ public class ReservationBillingAdapter implements ReservationBilling {
     private final TableOrderRepository orders;
     private final TableRepository tables;
     private final ReservationRepository reservations;
+    private final org.thomcgn.backend.inventory.service.SalesConfigurationService businessSettings;
 
     @Override
     public void openForCheckIn(Long reservationId, List<Long> tableIds) {
@@ -42,7 +43,7 @@ public class ReservationBillingAdapter implements ReservationBilling {
             order.setTable(table);
             order.setStatus(TableOrderStatus.OPEN);
             order.setPaid(false);
-            order.setOpenedAt(LocalDateTime.now());
+            order.setOpenedAt(businessSettings.currentVenueTime());
             orders.save(order);
             table.setStatus(TableStatus.OCCUPIED);
         }

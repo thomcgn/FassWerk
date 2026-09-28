@@ -58,8 +58,9 @@ public class TableOrderController {
     @Operation(summary = "Position vom Bon entfernen")
     @SecurityRequirement(name = "bearerAuth")
     @ApiResponse(responseCode = "200", description = "Position entfernt")
-    public TableOrderResponse removeItem(@PathVariable Long id, @PathVariable Long itemId) {
-        return tableOrderService.removeItem(id, itemId);
+    public TableOrderResponse removeItem(@PathVariable Long id, @PathVariable Long itemId,
+            @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey) {
+        return tableOrderService.removeItem(id, itemId, idempotencyKey);
     }
 
     @PostMapping("/{id}/close")

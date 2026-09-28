@@ -37,6 +37,7 @@ import java.util.List;
 public class AuthController {
 
     private final AuthService authService;
+    private final org.thomcgn.backend.auth.service.AuthRateLimiter rateLimiter;
 
     @PostMapping("/login")
     @Operation(summary = "Benutzer einloggen")
@@ -45,7 +46,8 @@ public class AuthController {
             @ApiResponse(responseCode = "401", description = "Anmeldedaten ungueltig")
     })
     public LoginResponse login(@Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
-        return authService.login(request, extractMetadata(httpRequest));
+        rateLimiter.check("login", httpRequest.getRemoteAddr(), request.email());
+        return authService.login(request, extractMetadata(httpRequest), "browser".equals(httpRequest.getHeader("X-Auth-Session")));
     }
 
     @PostMapping("/refresh")
@@ -55,6 +57,7 @@ public class AuthController {
             @ApiResponse(responseCode = "401", description = "Refresh-Token ungueltig")
     })
     public LoginResponse refresh(@Valid @RequestBody RefreshTokenRequest request, HttpServletRequest httpRequest) {
+        rateLimiter.check("refresh", httpRequest.getRemoteAddr(), request.refreshToken());
         return authService.refresh(request, extractMetadata(httpRequest));
     }
 

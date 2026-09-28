@@ -83,11 +83,11 @@ class SecurityHardeningIntegrationTest extends PostgresIntegrationTest {
     })
     void administrativeEndpointsEnforceRoles(String method, String path, int allowedStatus) throws Exception {
         assertError(send(method, path, null), 401);
-        assertError(send(method, path, tokens.createAccessToken(staff).token()), 403);
-        assertThat(send(method, path, tokens.createAccessToken(admin).token()).statusCode()).isEqualTo(allowedStatus);
+        assertError(send(method, path, tokens.createAccessToken(users.findById(staff.getId()).orElseThrow()).token()), 403);
+        assertThat(send(method, path, tokens.createAccessToken(users.findById(admin.getId()).orElseThrow()).token()).statusCode()).isEqualTo(allowedStatus);
         boolean barManagement = path.startsWith("/api/reorder/")
                 || path.contains("calculate-reorder") || path.contains("manual-day-close");
-        assertThat(send(method, path, tokens.createAccessToken(barchef).token()).statusCode())
+        assertThat(send(method, path, tokens.createAccessToken(users.findById(barchef.getId()).orElseThrow()).token()).statusCode())
                 .isEqualTo(barManagement ? allowedStatus : 403);
     }
 
@@ -98,8 +98,8 @@ class SecurityHardeningIntegrationTest extends PostgresIntegrationTest {
     void operationalReadsRequireKnownRole(String path) throws Exception {
         assertError(send("GET", path, null), 401);
         assertError(send("GET", path, signed("test-issuer", "ROLE_OTHER", true, "access")), 403);
-        assertThat(send("GET", path, tokens.createAccessToken(staff).token()).statusCode()).isEqualTo(200);
-        assertThat(send("GET", path, tokens.createAccessToken(barchef).token()).statusCode()).isEqualTo(200);
+        assertThat(send("GET", path, tokens.createAccessToken(users.findById(staff.getId()).orElseThrow()).token()).statusCode()).isEqualTo(200);
+        assertThat(send("GET", path, tokens.createAccessToken(users.findById(barchef.getId()).orElseThrow()).token()).statusCode()).isEqualTo(200);
     }
 
     @Test
@@ -110,7 +110,7 @@ class SecurityHardeningIntegrationTest extends PostgresIntegrationTest {
                 signed("test-issuer", "ROLE_ADMIN", true, "refresh"))) {
             assertError(send("GET", "/api/inventory", token), 401);
         }
-        String access = tokens.createAccessToken(admin).token();
+        String access = tokens.createAccessToken(users.findById(admin.getId()).orElseThrow()).token();
         admin.setActive(false);
         users.save(admin);
         assertError(send("GET", "/api/inventory", access), 401);
@@ -118,7 +118,7 @@ class SecurityHardeningIntegrationTest extends PostgresIntegrationTest {
 
     @Test
     void roleDowngradeTakesEffectForExistingToken() throws Exception {
-        String access = tokens.createAccessToken(admin).token();
+        String access = tokens.createAccessToken(users.findById(admin.getId()).orElseThrow()).token();
         admin.setRole(UserRole.STAFF);
         users.save(admin);
         assertError(send("GET", "/actuator/metrics", access), 403);
@@ -146,7 +146,7 @@ class SecurityHardeningIntegrationTest extends PostgresIntegrationTest {
 
     @Test
     void unknownRoutesAreDeniedAndSecurityErrorsHaveSafeEnvelopeAndHeaders() throws Exception {
-        assertError(send("GET", "/api/not-a-registered-resource", tokens.createAccessToken(admin).token()), 403);
+        assertError(send("GET", "/api/not-a-registered-resource", tokens.createAccessToken(users.findById(admin.getId()).orElseThrow()).token()), 403);
         var response = send("GET", "/api/inventory", null);
         assertError(response, 401);
         assertThat(response.headers().firstValue("www-authenticate")).contains("Bearer");
@@ -158,7 +158,7 @@ class SecurityHardeningIntegrationTest extends PostgresIntegrationTest {
     void anotherUsersSessionCannotBeRevoked() throws Exception {
         auth.login(new LoginRequest(staff.getEmail(), "Only-a-security-test"), metadata);
         Long id = jdbc.queryForObject("select id from refresh_tokens where user_id=?", Long.class, staff.getId());
-        assertError(send("DELETE", "/api/auth/sessions/" + id, tokens.createAccessToken(admin).token()), 404);
+        assertError(send("DELETE", "/api/auth/sessions/" + id, tokens.createAccessToken(users.findById(admin.getId()).orElseThrow()).token()), 404);
         assertThat(jdbc.queryForObject("select count(*) from refresh_tokens where revoked_at is null", Integer.class)).isEqualTo(1);
     }
 
@@ -201,7 +201,7 @@ class SecurityHardeningIntegrationTest extends PostgresIntegrationTest {
     @Test
     void allRegisteredBusinessEndpointsEnforceTheRoleMatrix() throws Exception {
         // Logout-all intentionally revokes the supplied access token; issue fresh tokens per probe.
-        String unknownRole = signed("test-issuer", "ROLE_OTHER", true, "access");
+
         int checked = 0;
         for (var entry : mappings.getHandlerMethods().entrySet()) {
             if (!entry.getValue().getBeanType().getPackageName().startsWith("org.thomcgn.backend.")) continue;
@@ -217,8 +217,8 @@ class SecurityHardeningIntegrationTest extends PostgresIntegrationTest {
                         continue;
                     }
                     assertThat(send(method, path, null).statusCode()).as("%s %s anonymous", method, path).isEqualTo(401);
-                    assertThat(send(method, path, unknownRole).statusCode()).as("%s %s unknown role", method, path).isEqualTo(403);
-                    assertThat(send(method, path, tokens.createAccessToken(admin).token()).statusCode()).as("%s %s ADMIN", method, path).isNotIn(401, 403);
+                    assertThat(send(method, path, signed("test-issuer", "ROLE_OTHER", true, "access")).statusCode()).as("%s %s unknown role", method, path).isEqualTo(403);
+                    assertThat(send(method, path, tokens.createAccessToken(users.findById(admin.getId()).orElseThrow()).token()).statusCode()).as("%s %s ADMIN", method, path).isNotIn(401, 403);
                     boolean adminOnly = pattern.startsWith("/api/volume-prices")
                             || pattern.startsWith("/api/drink")
                             || pattern.startsWith("/api/reports/") && !pattern.endsWith("revenue-overview")
@@ -227,8 +227,8 @@ class SecurityHardeningIntegrationTest extends PostgresIntegrationTest {
                             || pattern.endsWith("/calculate-reorder") || pattern.endsWith("/manual-day-close");
                     boolean staffAllowed = !adminOnly && !barManagement;
                     boolean barchefAllowed = !adminOnly || barManagement;
-                    int staffStatus = send(method, path, tokens.createAccessToken(staff).token()).statusCode();
-                    int barchefStatus = send(method, path, tokens.createAccessToken(barchef).token()).statusCode();
+                    int staffStatus = send(method, path, tokens.createAccessToken(users.findById(staff.getId()).orElseThrow()).token()).statusCode();
+                    int barchefStatus = send(method, path, tokens.createAccessToken(users.findById(barchef.getId()).orElseThrow()).token()).statusCode();
                     if (staffAllowed) assertThat(staffStatus).as("%s %s STAFF", method, path).isNotIn(401, 403);
                     else assertThat(staffStatus).as("%s %s STAFF", method, path).isEqualTo(403);
                     if (barchefAllowed) assertThat(barchefStatus).as("%s %s BARCHEF", method, path).isNotIn(401, 403);
@@ -243,7 +243,8 @@ class SecurityHardeningIntegrationTest extends PostgresIntegrationTest {
     private String signed(String issuer, String role, boolean expires, String type) {
         var builder = Jwts.builder().issuer(issuer).subject(admin.getEmail())
                 .issuedAt(new Date()).id(UUID.randomUUID().toString())
-                .claim("roles", List.of(role)).claim("tokenType", type);
+                .claim("roles", List.of(role)).claim("tokenType", type)
+                .claim("accessVersion", users.findById(admin.getId()).orElseThrow().getAccessVersion());
         if (expires) builder.expiration(Date.from(Instant.now().plusSeconds(60)));
         return builder.signWith(Keys.hmacShaKeyFor(properties.secret().getBytes(StandardCharsets.UTF_8))).compact();
     }

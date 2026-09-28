@@ -12,11 +12,11 @@ import type { LoginResponse, SessionResponse } from "@/types/api";
 const authGlobal = globalThis as typeof globalThis & {
   fasswerkRefresh?: ReturnType<typeof createRefreshCoordinator<LoginResponse | null>>;
 };
-const coordinateRefresh = authGlobal.fasswerkRefresh ??= createRefreshCoordinator<LoginResponse | null>();
+const coordinateRefresh = authGlobal.fasswerkRefresh ??= createRefreshCoordinator<LoginResponse | null>(0);
 
 const isProd = process.env.NODE_ENV === "production";
 
-async function applyTokenCookies(payload: LoginResponse) {
+async function applyTokenCookies(payload: LoginResponse, refreshing = false) {
   const cookieStore = await cookies();
 
   cookieStore.set(ACCESS_TOKEN_COOKIE, payload.accessToken, {
@@ -27,7 +27,7 @@ async function applyTokenCookies(payload: LoginResponse) {
     maxAge: payload.accessExpiresInSeconds || COOKIE_MAX_AGE_ACCESS_SECONDS,
   });
 
-  cookieStore.set(REFRESH_TOKEN_COOKIE, payload.refreshToken, {
+  if (!(refreshing && payload.refreshToken.startsWith("fw_"))) cookieStore.set(REFRESH_TOKEN_COOKIE, payload.refreshToken, {
     httpOnly: true,
     sameSite: "lax",
     secure: isProd,
@@ -59,7 +59,7 @@ export async function loginAgainstBackend(
 ): Promise<{ ok: true; payload: LoginResponse } | { ok: false; status: number; body: unknown }> {
   const response = await fetch(`${BACKEND_BASE_URL}/api/auth/login`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-Auth-Session": "browser" },
     body: JSON.stringify({ email, password }),
     cache: "no-store",
   });
@@ -94,12 +94,9 @@ export async function refreshSession(): Promise<boolean> {
     return (await response.json()) as LoginResponse;
   });
 
-  if (!payload) {
-    await clearTokenCookies();
-    return false;
-  }
+  if (!payload) return false;
 
-  await applyTokenCookies(payload);
+  await applyTokenCookies(payload, true);
   return true;
 }
 

@@ -32,6 +32,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtTokenService jwtTokenService;
     private final RevokedAccessTokenRepository revokedAccessTokenRepository;
     private final AppUserRepository appUserRepository;
+    private final org.thomcgn.backend.auth.repository.RefreshTokenRepository refreshTokens;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
@@ -62,6 +63,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
         var account = appUserRepository.findByEmailIgnoreCaseAndActiveTrue(claims.getSubject());
         if (account.isEmpty()) {
+            SecurityContextHolder.clearContext();
+            return;
+        }
+        Number version = claims.get("accessVersion", Number.class);
+        String family = claims.get("sessionFamily", String.class);
+        if (version == null || version.longValue() != account.get().getAccessVersion()
+                || (family != null && !refreshTokens.existsByUserIdAndFamilyIdAndRevokedAtIsNullAndExpiresAtAfter(
+                        account.get().getId(), family, OffsetDateTime.now()))) {
             SecurityContextHolder.clearContext();
             return;
         }

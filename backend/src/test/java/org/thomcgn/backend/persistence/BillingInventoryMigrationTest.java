@@ -29,7 +29,7 @@ class BillingInventoryMigrationTest extends MigratedPostgresTest {
             }
         }
 
-        assertThat(migration("latest").migrate().migrationsExecuted).isEqualTo(1);
+        assertThat(migration("latest").migrate().migrationsExecuted).isEqualTo(4);
 
         try (var connection = databaseConnection(); var sql = connection.createStatement()) {
             sql.execute("update inventory_items set content_per_package=0.0020,total_stock_amount=0.0010 where id=" + inventoryItem);

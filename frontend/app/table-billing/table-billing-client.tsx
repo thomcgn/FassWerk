@@ -238,7 +238,7 @@ export default function TableBillingClient() {
     if (!order) return;
     setError(null);
     setStatus(null);
-    const response = await fetch(`/api/table-orders/${order.id}/items/${itemId}`, { method: "DELETE" });
+    const response = await fetch(`/api/table-orders/${order.id}/items/${itemId}`, { method: "DELETE", headers: { "Idempotency-Key": crypto.randomUUID() } });
     if (!response.ok) {
       setError("Position konnte nicht entfernt werden.");
       return;

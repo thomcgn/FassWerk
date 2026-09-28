@@ -6,6 +6,8 @@ import java.util.List;
 
 /** Read-only module boundary. Selection of paid, closed orders belongs to Billing. */
 public interface BillingRevenueQueries {
+    /** Paid revenue grouped by the recorded business date, using [start, end). */
+    List<BusinessDayRevenue> businessDays(java.time.LocalDate start, java.time.LocalDate end);
     /** Returns revenue for the half-open interval [start, end). */
     BigDecimal revenue(LocalDateTime start, LocalDateTime end);
 

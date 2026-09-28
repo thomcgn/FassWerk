@@ -30,6 +30,9 @@ public class TableOrderItem extends BaseEntity {
     @Column(nullable = false)
     private Integer quantity;
 
+    @Column
+    private java.time.LocalDate saleBusinessDate;
+
     @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal unitPrice;
 

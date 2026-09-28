@@ -38,7 +38,9 @@ fail() {
 java -jar "${JAR_PATH}" > "${LOG_FILE}" 2>&1 &
 BACKEND_PID=$!
 READY=false
-DEADLINE=$((SECONDS + 40))
+STARTUP_TIMEOUT="${OPENAPI_STARTUP_TIMEOUT_SECONDS:-120}"
+[[ "$STARTUP_TIMEOUT" =~ ^[1-9][0-9]*$ ]] || fail "OPENAPI_STARTUP_TIMEOUT_SECONDS must be a positive integer."
+DEADLINE=$((SECONDS + STARTUP_TIMEOUT))
 while (( SECONDS < DEADLINE )); do
   kill -0 "${BACKEND_PID}" 2>/dev/null || fail "Backend exited before OpenAPI export."
   if curl -fsS --connect-timeout 1 --max-time 2 "${BASE_URL}/actuator/health" >/dev/null 2>&1; then
@@ -47,7 +49,7 @@ while (( SECONDS < DEADLINE )); do
   fi
   sleep 1
 done
-[[ "${READY}" == "true" ]] || fail "Backend was not healthy within 40 seconds."
+[[ "${READY}" == "true" ]] || fail "Backend was not healthy within ${STARTUP_TIMEOUT} seconds."
 
 curl -fsS --connect-timeout 2 --max-time 20 "${BASE_URL}/v3/api-docs.yaml" -o "${TEMP_FILE}" \
   || fail "OpenAPI download failed."

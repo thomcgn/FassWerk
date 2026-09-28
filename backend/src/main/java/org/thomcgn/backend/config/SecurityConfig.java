@@ -46,7 +46,6 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/reservations/scan/**", "/api/reservations/*/check-in", "/api/reservations/*/confirm").hasAnyRole("ADMIN", "BARCHEF", "STAFF")
                         .requestMatchers(HttpMethod.GET, "/api/reservations/**").hasAnyRole("ADMIN", "BARCHEF", "STAFF")
                         .requestMatchers(HttpMethod.POST, "/api/reservations/*/cancel").hasAnyRole("ADMIN", "BARCHEF", "STAFF")
-                        .requestMatchers(HttpMethod.GET, "/api/reservations/*/qr-code").hasAnyRole("ADMIN", "BARCHEF", "STAFF")
 
                         .requestMatchers(HttpMethod.GET, "/api/drink-categories", "/api/drinks", "/api/drink-variants").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/drink-categories/**", "/api/drinks/**", "/api/drink-variants/**").hasRole("ADMIN")
@@ -57,9 +56,6 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.PUT, "/api/volume-prices/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/volume-prices/**").hasRole("ADMIN")
 
-                        .requestMatchers(HttpMethod.GET, "/api/tables/**").hasAnyRole("ADMIN", "BARCHEF", "STAFF")
-                        .requestMatchers(HttpMethod.POST, "/api/tables/**").hasAnyRole("ADMIN", "BARCHEF", "STAFF")
-                        .requestMatchers(HttpMethod.PUT, "/api/tables/**").hasAnyRole("ADMIN", "BARCHEF", "STAFF")
 
                         .requestMatchers("/api/table-orders/**").hasAnyRole("ADMIN", "BARCHEF", "STAFF")
 
@@ -68,7 +64,6 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/reorder/**").hasAnyRole("ADMIN", "BARCHEF", "STAFF")
                         .requestMatchers(HttpMethod.POST, "/api/reorder/**").hasAnyRole("ADMIN", "BARCHEF")
                         .requestMatchers(HttpMethod.PUT, "/api/reorder/**").hasAnyRole("ADMIN", "BARCHEF")
-                        .requestMatchers(HttpMethod.GET, "/api/inventory", "/api/inventory/defaults", "/api/inventory/movements", "/api/inventory/reorder-suggestions").hasAnyRole("ADMIN", "BARCHEF", "STAFF")
                         .requestMatchers(HttpMethod.POST, "/api/inventory", "/api/inventory/*/adjust").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/inventory/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/inventory/**").hasRole("ADMIN")

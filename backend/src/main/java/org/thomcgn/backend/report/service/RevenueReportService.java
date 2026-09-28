@@ -4,14 +4,13 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.thomcgn.backend.billing.application.BillingRevenueQueries;
-import org.thomcgn.backend.billing.application.PaidOrderRevenue;
+import org.thomcgn.backend.billing.application.BusinessDayRevenue;
 import org.thomcgn.backend.report.api.dto.RevenueDayPointResponse;
 import org.thomcgn.backend.report.api.dto.RevenueOverviewResponse;
 
 import java.math.BigDecimal;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -24,38 +23,34 @@ import java.util.Map;
 public class RevenueReportService {
 
     private final BillingRevenueQueries billingRevenue;
+    private final org.thomcgn.backend.inventory.service.SalesConfigurationService businessSettings;
 
     @Transactional(readOnly = true)
     public RevenueOverviewResponse getOverview() {
-        LocalDate today = LocalDate.now();
+        LocalDate today = businessSettings.getCurrentBusinessDate();
         LocalDate weekStart = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
         LocalDate monthStart = today.withDayOfMonth(1);
 
-        BigDecimal dayRevenue = sumForRange(today.atStartOfDay(), today.plusDays(1).atStartOfDay());
-        BigDecimal weekRevenue = sumForRange(weekStart.atStartOfDay(), today.plusDays(1).atStartOfDay());
-        BigDecimal monthRevenue = sumForRange(monthStart.atStartOfDay(), today.plusDays(1).atStartOfDay());
-        BigDecimal dayConsumedMl = consumedMlForRange(today.atStartOfDay(), today.plusDays(1).atStartOfDay());
-        BigDecimal weekConsumedMl = consumedMlForRange(weekStart.atStartOfDay(), today.plusDays(1).atStartOfDay());
-        BigDecimal monthConsumedMl = consumedMlForRange(monthStart.atStartOfDay(), today.plusDays(1).atStartOfDay());
-
-        List<PaidOrderRevenue> weekOrders = billingRevenue.paidOrdersClosedBetweenInclusive(
-                weekStart.atStartOfDay(),
-                today.plusDays(1).atStartOfDay()
-        );
-
-        List<PaidOrderRevenue> monthOrders = billingRevenue.paidOrdersClosedBetweenInclusive(
-                monthStart.atStartOfDay(),
-                today.plusDays(1).atStartOfDay()
-        );
+        var allDays = billingRevenue.businessDays(weekStart.isBefore(monthStart) ? weekStart : monthStart, today.plusDays(1));
+        var weekOrders = allDays.stream().filter(day -> !day.businessDate().isBefore(weekStart)).toList();
+        var monthOrders = allDays.stream().filter(day -> !day.businessDate().isBefore(monthStart)).toList();
+        BigDecimal dayRevenue = allDays.stream().filter(day -> day.businessDate().equals(today))
+                .map(BusinessDayRevenue::revenue).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal weekRevenue = weekOrders.stream().map(BusinessDayRevenue::revenue).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal monthRevenue = monthOrders.stream().map(BusinessDayRevenue::revenue).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal dayConsumedMl = allDays.stream().filter(day -> day.businessDate().equals(today))
+                .map(BusinessDayRevenue::consumedMl).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal weekConsumedMl = weekOrders.stream().map(BusinessDayRevenue::consumedMl).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal monthConsumedMl = monthOrders.stream().map(BusinessDayRevenue::consumedMl).reduce(BigDecimal.ZERO, BigDecimal::add);
 
         Map<DayOfWeek, BigDecimal> weekMap = new EnumMap<>(DayOfWeek.class);
         for (DayOfWeek day : DayOfWeek.values()) {
             weekMap.put(day, BigDecimal.ZERO);
         }
 
-        for (PaidOrderRevenue order : weekOrders) {
-            DayOfWeek day = order.closedAt().getDayOfWeek();
-            BigDecimal orderTotal = order.total();
+        for (BusinessDayRevenue order : weekOrders) {
+            DayOfWeek day = order.businessDate().getDayOfWeek();
+            BigDecimal orderTotal = order.revenue();
             weekMap.put(day, weekMap.get(day).add(orderTotal));
         }
 
@@ -80,14 +75,6 @@ public class RevenueReportService {
         );
     }
 
-    private BigDecimal sumForRange(LocalDateTime start, LocalDateTime end) {
-        return billingRevenue.revenue(start, end);
-    }
-
-    private BigDecimal consumedMlForRange(LocalDateTime start, LocalDateTime end) {
-        return billingRevenue.consumedVolumeMl(start, end);
-    }
-
     private List<RevenueDayPointResponse> buildWeekPoints(Map<DayOfWeek, BigDecimal> weekMap) {
         List<RevenueDayPointResponse> points = new ArrayList<>();
         DayOfWeek[] ordered = {
@@ -105,7 +92,7 @@ public class RevenueReportService {
         return points;
     }
 
-    private List<RevenueDayPointResponse> buildMonthPoints(List<PaidOrderRevenue> monthOrders, LocalDate start, LocalDate end) {
+    private List<RevenueDayPointResponse> buildMonthPoints(List<BusinessDayRevenue> monthOrders, LocalDate start, LocalDate end) {
         Map<LocalDate, BigDecimal> dayMap = new java.util.LinkedHashMap<>();
         LocalDate cursor = start;
         while (!cursor.isAfter(end)) {
@@ -113,9 +100,9 @@ public class RevenueReportService {
             cursor = cursor.plusDays(1);
         }
 
-        for (PaidOrderRevenue order : monthOrders) {
-            LocalDate day = order.closedAt().toLocalDate();
-            BigDecimal orderTotal = order.total();
+        for (BusinessDayRevenue order : monthOrders) {
+            LocalDate day = order.businessDate();
+            BigDecimal orderTotal = order.revenue();
             dayMap.put(day, dayMap.getOrDefault(day, BigDecimal.ZERO).add(orderTotal));
         }
 

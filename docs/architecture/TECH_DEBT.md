@@ -1,5 +1,10 @@
 # FassWerk: Technical Debt nach Phase 1
 
+Aktueller Abschlussstand (2026-09-28): [FINAL_AUDIT.md](FINAL_AUDIT.md).
+Die folgenden Tabellen sind historische Baseline-/Phasenbefunde, keine aktuelle
+Liste ausschließlich offener Fehler. Phase 6 hat TD-035/036/037 mehrfach belegt;
+das Abschluss-Audit unterscheidet diese und verwendet FA-01 bis FA-09 für offene P1.
+
 Stand: 2026-09-27, Ausgangscommit `4ebd166`. Inventare und Ablaufe siehe
 [BASELINE.md](BASELINE.md). Keine produktiven Konfigurationen, Migrationen oder
 Fachservices wurden in Phase 1 umgebaut.
@@ -331,3 +336,44 @@ remain external verification. See
 
 Details und Prüfergebnisse: [PHASE_13_REPORT.md](PHASE_13_REPORT.md),
 [Monitoring und Alerting](../operations/monitoring-alerting.md).
+
+## Fortschritt Phase 14 (2026-09-28)
+
+- Phase 13: CI #36 laut Nutzer erfolgreich.
+- TD-032: ungenutzte MapStruct-Abhaengigkeit samt Prozessor, Lombok-Binding und
+  Compileroption entfernt. Die veraltete Spring-Nullable-Annotation in
+  OpenApiConfig nutzt jetzt das bereits vorhandene JSpecify. Warnungen werden
+  nicht unterdrueckt; weitere historische Einzelbefunde sind im Abschluss-Audit
+  separat abzugleichen.
+- Acht ungenutzte Java-Imports und fuenf redundante Security-Matcher entfernt;
+  drei identische Frontend-Parser wiederverwendet. Keine API-Route oder DTO ohne
+  belastbaren Nachweis geloescht. Scheduler-Kommentar an den bestehenden Cron
+  angepasst; Next-Handler-Signatur beibehalten.
+
+Nachweise und Validierung: [PHASE_14_REPORT.md](PHASE_14_REPORT.md).
+
+
+## Abschluss Phase 15 (2026-09-28)
+
+Das [Abschluss-Audit](FINAL_AUDIT.md) ordnet sämtliche Baseline-IDs dem finalen
+Stand zu und dokumentiert neun offene P1 mit konkreten nächsten Nachweisen.
+Insbesondere bleibt TD-020 offen; Cross-Day-Stornos und das gemeinsame Zeitmodell
+sind nicht durch die Same-Day-Tests gelöst. Die Aussage aus Phase 8, der
+Reorder-Scheduler verarbeite Artikel isoliert, ist hinsichtlich der Transaktionen
+zu korrigieren: Der gesamte Lauf ist transaktional (FA-07).
+
+206 Backendtests, 18 kritische E2E und Frontend-Gates stammen aus Phase 14 am
+unveränderten Anwendungsstand. Zeilenabdeckung 79,55 %, Branches 65,19 %.
+Phase 15 aktualisierte npm-/Java-Scans: jeweils 0 Befunde. Keine neuen Images,
+keine produktive Migration/Rotation/Restore-Prüfung; keine pauschale
+Produktionsfreigabe. Nächster eigenständiger Auftrag: Production-Roadmap Phase 0.
+
+## Auditbehebung (2026-09-28)
+
+Der Folgeauftrag behebt die konkreten Anwendungslücken FA-01–FA-07 sowie PDF-
+Trunkierung und fehlende RECEIVED-Bestandsbuchung. Der neue Full-Stack-Test prüft
+reale BFF-/Backend-/DB-Prozesse, Neustart, Responseverlust und Dump/Restore.
+Der einmalige Widerruf alter Sitzungen in V26 wurde nach ausdrücklicher Zustimmung
+ergänzt. Aktueller Status und noch externe Nachweise:
+[AUDIT_REMEDIATION.md](AUDIT_REMEDIATION.md). Historische Aussagen oben beschreiben
+jeweils den damaligen Stand; Production-Roadmap Phase 0 wurde nicht begonnen.

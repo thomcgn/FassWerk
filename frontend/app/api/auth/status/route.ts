@@ -1,13 +1,11 @@
 import { NextResponse } from "next/server";
-import { backendFetchWithAuth, clearTokenCookies } from "@/lib/server-auth";
+import { backendFetchWithAuth } from "@/lib/server-auth";
 
 export async function GET() {
   const response = await backendFetchWithAuth("/api/auth/sessions", { method: "GET" });
   const authenticated = response.ok;
 
-  if (!authenticated) {
-    await clearTokenCookies();
-  }
+  // A delayed status response must not clear cookies from a newer login.
 
   return NextResponse.json({ authenticated });
 }

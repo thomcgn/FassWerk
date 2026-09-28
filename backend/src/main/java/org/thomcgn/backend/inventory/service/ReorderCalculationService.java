@@ -30,6 +30,8 @@ public class ReorderCalculationService {
     private final InventoryItemRepository inventoryItemRepository;
     private final DrinkSalesTrackingService drinkSalesTrackingService;
     private final SalesConfigurationService salesConfigurationService;
+    private final org.springframework.transaction.PlatformTransactionManager transactionManager;
+    private final org.thomcgn.backend.common.persistence.BookingMutationLock bookingLock;
 
     /**
      * Calculates the recommended reorder amount for an inventory item based on:
@@ -107,21 +109,28 @@ public class ReorderCalculationService {
 
     /**
      * Recalculates all inventory items (scheduled task).
-     * Runs daily at 2:00 AM UTC.
+     * Runs daily at 05:30 Europe/Berlin, following the business-day close.
      */
     @Scheduled(cron = "0 30 5 * * *", zone = "Europe/Berlin")
-    @Transactional
     public void recalculateAllInventoryItems() {
         log.info("Starting daily reorder calculation for all inventory items");
 
-        List<InventoryItem> inventoryItems = inventoryItemRepository.findByActiveTrue();
+        var transaction = new org.springframework.transaction.support.TransactionTemplate(transactionManager);
+        transaction.setPropagationBehavior(org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        List<Long> inventoryItems = transaction.execute(status -> inventoryItemRepository.findByActiveTrue().stream()
+                .map(InventoryItem::getId).toList());
         int successCount = 0;
         int failureCount = 0;
 
-        for (InventoryItem item : inventoryItems) {
+        for (Long itemId : inventoryItems) {
             try {
-                ReorderCalculation calc = calculateReorderAmount(item);
-                if (calc != null) {
+                // Count success only after the per-item transaction actually commits.
+                Boolean calculated = transaction.execute(status -> {
+                    bookingLock.acquire();
+                    var item = inventoryItemRepository.findById(itemId).filter(InventoryItem::isActive);
+                    return item.isPresent() && calculateReorderAmount(item.get()) != null;
+                });
+                if (Boolean.TRUE.equals(calculated)) {
                     successCount++;
                 }
             } catch (Exception e) {

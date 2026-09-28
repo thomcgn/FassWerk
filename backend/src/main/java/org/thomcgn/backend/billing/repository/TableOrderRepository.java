@@ -45,8 +45,8 @@ public interface TableOrderRepository extends JpaRepository<TableOrder, Long> {
             select o
             from TableOrder o
             where o.status = :status
-              and o.closedAt >= :start
-              and o.closedAt < :end
+              and (o.closedBusinessDate = :businessDate
+                or (o.closedBusinessDate is null and o.closedAt >= :start and o.closedAt < :end))
               and (:paid is null or o.paid = :paid)
               and (
                 cast(:queryText as string) is null
@@ -56,6 +56,7 @@ public interface TableOrderRepository extends JpaRepository<TableOrder, Long> {
             """)
     List<TableOrder> searchArchive(
             @Param("status") TableOrderStatus status,
+            @Param("businessDate") java.time.LocalDate businessDate,
             @Param("start") LocalDateTime start,
             @Param("end") LocalDateTime end,
             @Param("queryText") String queryText,

@@ -28,6 +28,8 @@ public class ReorderOrderService {
     private final ReorderOrderRepository reorderOrderRepository;
     private final SupplierRepository supplierRepository;
     private final InventoryItemRepository inventoryItemRepository;
+    private final InventoryService inventoryService;
+    private final org.thomcgn.backend.common.persistence.BookingMutationLock bookingLock;
 
     // =========== Supplier Management ===========
 
@@ -114,14 +116,42 @@ public class ReorderOrderService {
 
     @Transactional
     public ReorderOrderResponse updateReorderStatus(Long reorderId, String newStatus) {
+        bookingLock.acquire();
         ReorderOrder order = reorderOrderRepository.findById(reorderId)
                 .orElseThrow(() -> new NotFoundException("Reorder order not found: " + reorderId));
-
+        ReorderOrder.ReorderStatus target;
         try {
-            order.setStatus(ReorderOrder.ReorderStatus.valueOf(newStatus.toUpperCase()));
-        } catch (IllegalArgumentException e) {
+            target = ReorderOrder.ReorderStatus.valueOf(newStatus.toUpperCase(java.util.Locale.ROOT));
+        } catch (IllegalArgumentException | NullPointerException e) {
             throw new BadRequestException("Invalid reorder status");
         }
+        if (order.getStatus() == target) return toReorderOrderResponse(order);
+        if (order.getStatus() == ReorderOrder.ReorderStatus.RECEIVED
+                || order.getStatus() == ReorderOrder.ReorderStatus.CANCELLED) {
+            throw new org.thomcgn.backend.common.exception.ConflictException("Final delivery status cannot be changed");
+        }
+        if (target == ReorderOrder.ReorderStatus.RECEIVED) {
+            var unit = order.getInventoryItem().getContentUnit();
+            java.math.BigDecimal amount = order.getOrderedQuantity();
+            String orderedUnit = order.getOrderedUnit().trim().toUpperCase(java.util.Locale.ROOT);
+            if (!unit.name().equals(orderedUnit)) {
+                if (unit == org.thomcgn.backend.inventory.domain.ContentUnit.LITER && orderedUnit.equals("MILLILITER"))
+                    amount = amount.movePointLeft(3);
+                else if (unit == org.thomcgn.backend.inventory.domain.ContentUnit.MILLILITER && orderedUnit.equals("LITER"))
+                    amount = amount.movePointRight(3);
+                else throw new BadRequestException("Delivery unit cannot be converted to inventory unit");
+            }
+            try { amount = amount.setScale(4, java.math.RoundingMode.UNNECESSARY); }
+            catch (ArithmeticException unsupportedPrecision) { throw new BadRequestException("Delivery quantity is below inventory precision"); }
+            if (amount.signum() <= 0) throw new BadRequestException("Delivery quantity must be positive");
+            inventoryService.adjust(order.getInventoryItem().getId(),
+                    new org.thomcgn.backend.inventory.api.dto.InventoryAdjustmentRequest(
+                            amount, "Delivery #" + order.getId(), true),
+                    "system:reorder", "reorder-receive:" + order.getId());
+            order.setReceivedQuantity(order.getOrderedQuantity());
+            order.setReceivedAt(java.time.OffsetDateTime.now());
+        }
+        order.setStatus(target);
 
         ReorderOrder saved = reorderOrderRepository.save(order);
         log.info("Updated reorder order #{} status to {}", saved.getId(), newStatus);

@@ -1,6 +1,6 @@
 import { parseArray, isRecord } from "../../lib/api-client.ts";
-import { parseDrink, parseDrinkVariant, parseInventoryItem } from "../billing/model.ts";
-import type { Drink, DrinkVariant, InventoryItem, InventoryItemUpsertRequest, InventoryPackageDefaults } from "../../types/api.ts";
+export { parseDrinks, parseDrinkVariants, parseInventoryItems } from "../billing/model.ts";
+import type { DrinkVariant, InventoryItem, InventoryItemUpsertRequest, InventoryPackageDefaults } from "../../types/api.ts";
 
 export type PackageType = InventoryItemUpsertRequest["packageType"];
 export type ContentUnit = InventoryItemUpsertRequest["contentUnit"];
@@ -15,9 +15,6 @@ export const contentDefaultsByType: Record<PackageType, { contentUnit: ContentUn
 
 export const isPackageType = (value: string): value is PackageType => ["BARREL", "CRATE", "BOTTLE", "BOX", "SINGLE_BOTTLE"].includes(value);
 export const isContentUnit = (value: string): value is ContentUnit => ["MILLILITER", "LITER", "PIECE"].includes(value);
-export const parseInventoryItems = (value: unknown): InventoryItem[] | null => parseArray(value, parseInventoryItem);
-export const parseDrinks = (value: unknown): Drink[] | null => parseArray(value, parseDrink);
-export const parseDrinkVariants = (value: unknown): DrinkVariant[] | null => parseArray(value, parseDrinkVariant);
 
 function parsePackageDefaults(value: unknown): InventoryPackageDefaults | null {
   if (!isRecord(value) || typeof value.packageType !== "string" || !isPackageType(value.packageType)

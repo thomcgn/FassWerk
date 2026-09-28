@@ -126,8 +126,9 @@ class AuthFlowIntegrationTest extends PostgresIntegrationTest {
         assertEquals(204, revoke.statusCode());
 
         HttpResponse<String> sessionsAfterRevoke = send("GET", "/api/auth/sessions", null, accessToken);
-        assertEquals(200, sessionsAfterRevoke.statusCode());
-        assertTrue(sessionsAfterRevoke.body().contains("[]"));
+        assertEquals(401, sessionsAfterRevoke.statusCode());
+        String refreshBody = "{\"refreshToken\":\"" + extractString(loginPayload, "refreshToken") + "\"}";
+        assertEquals(401, send("POST", "/api/auth/refresh", refreshBody, null).statusCode());
     }
 
     private String login() throws Exception {

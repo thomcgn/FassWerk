@@ -35,7 +35,7 @@ class ArchiveRepositoryIntegrationTest extends PostgresIntegrationTest {
                 values(?,'CLOSED',false,'2040-01-01 18:00','2040-01-01 19:00') returning id
                 """, Long.class, table);
         var start = LocalDateTime.of(2040, 1, 1, 0, 0);
-        var archived = orders.searchArchive(TableOrderStatus.CLOSED, start, start.plusDays(1), query, null);
+        var archived = orders.searchArchive(TableOrderStatus.CLOSED, start.toLocalDate(), start, start.plusDays(1), query, null);
         var unpaid = orders.searchUnpaidArchive(TableOrderStatus.CLOSED, query);
         if ("absent".equals(query)) {
             assertThat(archived).isEmpty();
@@ -44,6 +44,6 @@ class ArchiveRepositoryIntegrationTest extends PostgresIntegrationTest {
             assertThat(archived).extracting(item -> item.getId()).contains(order);
             assertThat(unpaid).extracting(item -> item.getId()).contains(order);
         }
-        assertThat(orders.searchArchive(TableOrderStatus.CLOSED, start, start.plusDays(1), query, true)).isEmpty();
+        assertThat(orders.searchArchive(TableOrderStatus.CLOSED, start.toLocalDate(), start, start.plusDays(1), query, true)).isEmpty();
     }
 }

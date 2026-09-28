@@ -66,10 +66,12 @@ class RevenueBoundaryIntegrationTest extends PostgresIntegrationTest {
 
     @Test
     void reportingPreservesPaidTotalsVolumesAndCharts() {
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.of(2035, 1, 15);
+        jdbc.update("update inventory_business_settings set manual_business_date=?", today);
         order("CLOSED", true, today.atTime(12, 0), "12.00");
         order("CLOSED", false, today.atTime(12, 0), "30.00");
         order("OPEN", true, today.atTime(12, 0), "50.00");
+        order("CLOSED", true, today.plusDays(1).atStartOfDay(), "100.00");
         var result = reports.getOverview();
         assertThat(result.dayRevenue()).isEqualByComparingTo("12.00");
         assertThat(result.weekRevenue()).isEqualByComparingTo("12.00");

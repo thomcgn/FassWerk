@@ -1,5 +1,10 @@
 # Security Review (Phase 6)
 
+> Historischer Phase-6-Bericht. Die aktuellen Änderungen an Auth-Limits,
+> Access-Widerruf und Browser-Sitzungen sowie die genehmigten Upgrade-Regeln
+> stehen in [AUDIT_REMEDIATION.md](AUDIT_REMEDIATION.md).
+
+
 Stand: 2026-09-27. Review von Identity & Access, REST-Security und dem
 cookiebasierten Next.js-Adapter. Dies ist kein Penetrationstest und keine
 pauschale Produktionsfreigabe.

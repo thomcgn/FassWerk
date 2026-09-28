@@ -30,5 +30,8 @@ public class AppUser extends BaseEntity {
 
     @Column(nullable = false)
     private boolean active;
+
+    @Column(nullable = false)
+    private long accessVersion;
 }
 

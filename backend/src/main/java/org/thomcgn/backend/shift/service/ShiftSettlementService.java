@@ -134,11 +134,9 @@ public class ShiftSettlementService {
     }
 
     private BigDecimal resolveDailyRevenue(LocalDate date) {
-        LocalDateTime start = date.atStartOfDay();
-        LocalDateTime end = date.plusDays(1).atStartOfDay();
-        return billingRevenue
-                .revenue(start, end)
-                .setScale(2, RoundingMode.HALF_UP);
+        return billingRevenue.businessDays(date, date.plusDays(1)).stream()
+                .map(org.thomcgn.backend.billing.application.BusinessDayRevenue::revenue)
+                .reduce(BigDecimal.ZERO, BigDecimal::add).setScale(2, RoundingMode.HALF_UP);
     }
 
 }

@@ -43,27 +43,37 @@ public class AuthService {
     private final JwtProperties jwtProperties;
     private final MeterRegistry meterRegistry;
     private final DeviceFingerprintService deviceFingerprintService;
+    private final jakarta.persistence.EntityManager entityManager;
+
+    private String dummyPasswordHash;
+
+    @jakarta.annotation.PostConstruct
+    void preparePasswordCheck() {
+        dummyPasswordHash = passwordEncoder.encode("non-secret-dummy-password-for-equal-cost-check");
+    }
 
     @Transactional
     public LoginResponse login(LoginRequest request, ClientMetadata metadata) {
-        AppUser user = appUserRepository.lockByEmail(request.email()).filter(AppUser::isActive)
-                .orElseThrow(() -> {
-                    meterRegistry.counter("auth.login.failure").increment();
-                    return new AuthenticationRejectedException("Invalid credentials");
-                });
+        return login(request, metadata, false);
+    }
 
-        if (request.password().getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 72
-                || !passwordEncoder.matches(request.password(), user.getPasswordHash())) {
+    @Transactional
+    public LoginResponse login(LoginRequest request, ClientMetadata metadata, boolean browser) {
+        var candidate = appUserRepository.lockByEmail(request.email()).filter(AppUser::isActive);
+        boolean lengthValid = request.password().getBytes(java.nio.charset.StandardCharsets.UTF_8).length <= 72;
+        boolean matches = passwordEncoder.matches(lengthValid ? request.password() : "oversized-input",
+                candidate.map(AppUser::getPasswordHash).orElse(dummyPasswordHash));
+        if (candidate.isEmpty() || !lengthValid || !matches) {
             meterRegistry.counter("auth.login.failure").increment();
             throw new AuthenticationRejectedException("Invalid credentials");
         }
-
         meterRegistry.counter("auth.login.success").increment();
-        return issueTokenPair(user, metadata);
+        return issueTokenPair(candidate.get(), metadata, UUID.randomUUID().toString(), browser);
     }
 
     @Transactional(noRollbackFor = AuthenticationRejectedException.class)
     public LoginResponse refresh(RefreshTokenRequest request, ClientMetadata metadata) {
+        if (isBrowserToken(request.refreshToken())) return refreshBrowser(request.refreshToken());
         Claims claims = parseAndValidateRefreshClaims(request.refreshToken());
         String tokenId = claims.get(JwtTokenService.CLAIM_TOKEN_ID, String.class);
 
@@ -79,6 +89,11 @@ public class AuthService {
             throw new AuthenticationRejectedException("Invalid refresh token");
         }
         if (tokenById.getRevokedAt() != null) {
+            if ("SECURITY_UPGRADE".equals(tokenById.getRevokedReason())) {
+                // Stale pre-upgrade cookies must not revoke sessions created by a new login.
+                meterRegistry.counter("auth.refresh.failure").increment();
+                throw new AuthenticationRejectedException("Session expired; sign in again");
+            }
             revokeAllRefreshTokensForUser(tokenById.getUser());
             meterRegistry.counter("auth.refresh.replay_detected").increment();
             log.warn("refresh_replay_detected");
@@ -100,21 +115,19 @@ public class AuthService {
         storedToken.setRevokedReason("ROTATED");
         refreshTokenRepository.save(storedToken);
         meterRegistry.counter("auth.refresh.success").increment();
-        return issueTokenPair(storedToken.getUser(), metadata);
+        return issueTokenPair(storedToken.getUser(), metadata, storedToken.getFamilyId(), false);
     }
 
     @Transactional
     public void logout(LogoutRequest request, String bearerAccessToken) {
-        Claims claims = parseAndValidateRefreshClaims(request.refreshToken());
-        String tokenId = claims.get(JwtTokenService.CLAIM_TOKEN_ID, String.class);
-
-        lockActiveUser(claims.getSubject());
-        refreshTokenRepository.findByTokenIdAndRevokedAtIsNull(tokenId)
-                .ifPresent(token -> {
-                    token.setRevokedAt(OffsetDateTime.now());
-                    token.setRevokedReason("LOGOUT");
-                    refreshTokenRepository.save(token);
-                });
+        String id = refreshIdentifier(request.refreshToken());
+        var existing = refreshTokenRepository.findByTokenId(id);
+        if (existing.isPresent()) {
+            AppUser user = lockActiveUser(existing.get().getUser().getEmail());
+            markSessionsRevoked(refreshTokenRepository.findByUserAndFamilyId(user, existing.get().getFamilyId()),
+                    OffsetDateTime.now(), "LOGOUT");
+            invalidateAccess(user);
+        }
 
         revokeAccessToken(bearerAccessToken);
         meterRegistry.counter("auth.logout.single").increment();
@@ -145,9 +158,9 @@ public class AuthService {
         AppUser user = lockActiveUser(userEmail);
         RefreshToken session = refreshTokenRepository.findByIdAndUserAndRevokedAtIsNull(sessionId, user)
                 .orElseThrow(() -> new NotFoundException("Session not found: " + sessionId));
-        session.setRevokedAt(OffsetDateTime.now());
-        session.setRevokedReason("MANUAL");
-        refreshTokenRepository.save(session);
+        markSessionsRevoked(refreshTokenRepository.findByUserAndFamilyId(user, session.getFamilyId()),
+                OffsetDateTime.now(), "MANUAL");
+        invalidateAccess(user);
         meterRegistry.counter("auth.session.revoke").increment();
     }
 
@@ -159,17 +172,22 @@ public class AuthService {
                 .findByUserAndRevokedAtIsNullAndExpiresAtAfterOrderByCreatedAtDesc(user, now);
 
         markSessionsRevoked(activeSessions, now, "LOGOUT_ALL");
+        invalidateAccess(user);
         revokeAccessToken(bearerAccessToken);
         meterRegistry.counter("auth.logout.all").increment();
     }
 
-    private LoginResponse issueTokenPair(AppUser user, ClientMetadata metadata) {
-        JwtTokenService.AccessTokenDetails accessToken = jwtTokenService.createAccessToken(user);
+    private LoginResponse issueTokenPair(AppUser user, ClientMetadata metadata, String familyId, boolean browser) {
+        JwtTokenService.AccessTokenDetails accessToken = jwtTokenService.createAccessToken(user, familyId);
         String refreshTokenId = UUID.randomUUID().toString();
-        String refreshTokenJwt = jwtTokenService.createRefreshToken(user, refreshTokenId);
+        String refreshTokenJwt = browser ? "fw_" + java.util.HexFormat.of().formatHex(randomBytes())
+                : jwtTokenService.createRefreshToken(user, refreshTokenId);
+        if (browser) refreshTokenId = hashBrowserToken(refreshTokenJwt);
 
         RefreshToken refreshToken = new RefreshToken();
         refreshToken.setTokenId(refreshTokenId);
+        refreshToken.setFamilyId(familyId);
+        refreshToken.setBrowserSession(browser);
         refreshToken.setUser(user);
         refreshToken.setExpiresAt(OffsetDateTime.now().plusDays(jwtProperties.refreshTokenDays()));
         refreshToken.setLastUsedAt(OffsetDateTime.now());
@@ -188,6 +206,50 @@ public class AuthService {
         );
     }
 
+    private void invalidateAccess(AppUser user) {
+        user.setAccessVersion(user.getAccessVersion() + 1);
+        appUserRepository.save(user);
+    }
+
+    private static byte[] randomBytes() {
+        byte[] value = new byte[32];
+        new java.security.SecureRandom().nextBytes(value);
+        return value;
+    }
+
+    private static boolean isBrowserToken(String token) {
+        return token != null && token.matches("fw_[0-9a-f]{64}");
+    }
+
+    private static String hashBrowserToken(String token) {
+        try {
+            return java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(token.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        } catch (java.security.NoSuchAlgorithmException e) { throw new IllegalStateException(e); }
+    }
+
+    private String refreshIdentifier(String token) {
+        return isBrowserToken(token) ? hashBrowserToken(token) : parseAndValidateRefreshClaims(token).getId();
+    }
+
+    private LoginResponse refreshBrowser(String rawToken) {
+        RefreshToken session = refreshTokenRepository.findByTokenId(hashBrowserToken(rawToken))
+                .orElseThrow(() -> new AuthenticationRejectedException("Invalid session"));
+        AppUser user = lockActiveUser(session.getUser().getEmail());
+        // Reload after acquiring the account lock: logout may have committed while we waited.
+        entityManager.refresh(session);
+        if (!session.isBrowserSession() || session.getRevokedAt() != null
+                || !session.getExpiresAt().isAfter(OffsetDateTime.now())) {
+            throw new AuthenticationRejectedException("Invalid session");
+        }
+        var access = jwtTokenService.createAccessToken(user, session.getFamilyId());
+        session.setLastUsedAt(OffsetDateTime.now());
+        meterRegistry.counter("auth.refresh.success").increment();
+        return new LoginResponse(access.token(), rawToken, "Bearer", jwtProperties.accessTokenMinutes() * 60,
+                Math.max(0, java.time.Duration.between(OffsetDateTime.now(), session.getExpiresAt()).toSeconds()),
+                user.getRole().name(), user.getName());
+    }
+
     private Claims parseAndValidateRefreshClaims(String refreshToken) {
         Claims claims;
         try {
@@ -203,8 +265,11 @@ public class AuthService {
     }
 
     private AppUser lockActiveUser(String email) {
-        return appUserRepository.lockByEmail(email).filter(AppUser::isActive)
+        AppUser user = appUserRepository.lockByEmail(email)
                 .orElseThrow(() -> new AuthenticationRejectedException("Invalid credentials"));
+        entityManager.refresh(user);
+        if (!user.isActive()) throw new AuthenticationRejectedException("Invalid credentials");
+        return user;
     }
 
     private AppUser getActiveUserByEmail(String userEmail) {
@@ -218,8 +283,7 @@ public class AuthService {
         }
 
         try {
-            Claims claims = parseAndValidateRefreshClaims(refreshToken);
-            return claims.get(JwtTokenService.CLAIM_TOKEN_ID, String.class);
+            return refreshIdentifier(refreshToken);
         } catch (AuthenticationRejectedException ignored) {
             return null;
         }
@@ -230,6 +294,7 @@ public class AuthService {
         List<RefreshToken> activeSessions = refreshTokenRepository
                 .findByUserAndRevokedAtIsNullAndExpiresAtAfterOrderByCreatedAtDesc(user, now);
         markSessionsRevoked(activeSessions, now, "REFRESH_REPLAY");
+        invalidateAccess(user);
     }
 
     private void markSessionsRevoked(List<RefreshToken> sessions, OffsetDateTime revokedAt, String reason) {

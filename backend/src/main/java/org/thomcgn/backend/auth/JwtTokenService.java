@@ -33,6 +33,10 @@ public class JwtTokenService {
     private final JwtProperties jwtProperties;
 
     public AccessTokenDetails createAccessToken(AppUser user) {
+        return createAccessToken(user, null);
+    }
+
+    public AccessTokenDetails createAccessToken(AppUser user, String familyId) {
         Instant now = Instant.now();
         Instant expiresAt = now.plus(jwtProperties.accessTokenMinutes(), ChronoUnit.MINUTES);
         String tokenId = UUID.randomUUID().toString();
@@ -44,6 +48,8 @@ public class JwtTokenService {
                 .expiration(Date.from(expiresAt))
                 .claim(CLAIM_TOKEN_TYPE, TOKEN_TYPE_ACCESS)
                 .claim(CLAIM_TOKEN_ID, tokenId)
+                .claim("accessVersion", user.getAccessVersion())
+                .claim("sessionFamily", familyId)
                 .claim("roles", List.of("ROLE_" + user.getRole().name()))
                 .claim("name", user.getName())
                 .signWith(signingKey())

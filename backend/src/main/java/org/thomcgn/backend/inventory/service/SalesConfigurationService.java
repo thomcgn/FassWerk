@@ -24,6 +24,7 @@ import java.time.ZonedDateTime;
 public class SalesConfigurationService {
 
     private final InventoryBusinessSettingsRepository inventoryBusinessSettingsRepository;
+    private final java.time.Clock businessClock;
 
     @Value("${app.sales.calculation.weeks-lookback:4}")
     private Integer defaultWeeksLookback;
@@ -46,9 +47,9 @@ public class SalesConfigurationService {
     public SalesConfigurationDto getConfiguration() {
         InventoryBusinessSettings settings = getOrCreateSettings();
         return new SalesConfigurationDto(
-                defaultWeeksLookback,
-                defaultSafetyFactor,
-                defaultLeadTimeDays,
+                settings.getWeeksLookback() == null ? defaultWeeksLookback : settings.getWeeksLookback(),
+                settings.getDefaultSafetyFactor() == null ? defaultSafetyFactor : settings.getDefaultSafetyFactor(),
+                settings.getDefaultLeadTimeDays() == null ? defaultLeadTimeDays : settings.getDefaultLeadTimeDays(),
                 settings.getBusinessTimezone(),
                 settings.getBusinessDayEndsAt(),
                 settings.getManualBusinessDate()
@@ -57,12 +58,24 @@ public class SalesConfigurationService {
 
     /**
      * Aktualisiert die Konfiguration.
-     * Hinweis: Diese Implementierung liest aus application.yml.
-     * Für persistente Änderungen müsste eine zusätzliche Tabelle/Entity verwendet werden.
      */
     @Transactional
     public SalesConfigurationDto updateConfiguration(SalesConfigurationDto config) {
         InventoryBusinessSettings settings = getOrCreateSettings();
+        if (config.weeksLookback() != null) {
+            if (config.weeksLookback() < 1 || config.weeksLookback() > 104) throw new BadRequestException("Lookback must be between 1 and 104 weeks");
+            settings.setWeeksLookback(config.weeksLookback());
+        }
+        if (config.defaultSafetyFactor() != null) {
+            if (config.defaultSafetyFactor().signum() < 0 || config.defaultSafetyFactor().compareTo(new BigDecimal("100")) > 0)
+                throw new BadRequestException("Safety factor must be between 0 and 100");
+            try { settings.setDefaultSafetyFactor(config.defaultSafetyFactor().setScale(4, java.math.RoundingMode.UNNECESSARY)); }
+            catch (ArithmeticException unsupportedPrecision) { throw new BadRequestException("Safety factor allows at most four decimal places"); }
+        }
+        if (config.defaultLeadTimeDays() != null) {
+            if (config.defaultLeadTimeDays() < 0 || config.defaultLeadTimeDays() > 365) throw new BadRequestException("Lead time must be between 0 and 365 days");
+            settings.setDefaultLeadTimeDays(config.defaultLeadTimeDays());
+        }
         if (config.businessTimezone() != null && !config.businessTimezone().isBlank()) {
             try {
                 settings.setBusinessTimezone(ZoneId.of(config.businessTimezone()).getId());
@@ -100,12 +113,16 @@ public class SalesConfigurationService {
             return settings.getManualBusinessDate();
         }
 
-        ZonedDateTime now = ZonedDateTime.now(ZoneId.of(settings.getBusinessTimezone()));
+        ZonedDateTime now = ZonedDateTime.now(businessClock.withZone(ZoneId.of(settings.getBusinessTimezone())));
         LocalDate date = now.toLocalDate();
         if (now.toLocalTime().isBefore(settings.getBusinessDayEndsAt())) {
             return date.minusDays(1);
         }
         return date;
+    }
+
+    public java.time.LocalDateTime currentVenueTime() {
+        return java.time.LocalDateTime.now(businessClock.withZone(getBusinessZoneId()));
     }
 
     private InventoryBusinessSettings getOrCreateSettings() {

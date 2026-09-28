@@ -24,5 +24,10 @@ public class InventoryBusinessSettings extends BaseEntity {
 
     @Column
     private LocalDate manualBusinessDate;
+
+    private Integer weeksLookback;
+    @Column(precision = 10, scale = 4)
+    private java.math.BigDecimal defaultSafetyFactor;
+    private Integer defaultLeadTimeDays;
 }
 

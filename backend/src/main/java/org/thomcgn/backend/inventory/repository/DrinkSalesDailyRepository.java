@@ -11,6 +11,8 @@ import java.util.Optional;
 
 @Repository
 public interface DrinkSalesDailyRepository extends JpaRepository<DrinkSalesDaily, Long> {
+    @Query("select d from DrinkSalesDaily d join fetch d.drink left join fetch d.drinkVariant")
+    List<DrinkSalesDaily> findAllForAggregation();
 
     Optional<DrinkSalesDaily> findByDrinkIdAndDrinkVariantIdAndSaleDate(Long drinkId, Long drinkVariantId, LocalDate saleDate);
 

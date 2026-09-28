@@ -35,6 +35,14 @@ jobs:
       - name: Verify backend
         run: ./mvnw -B clean verify
 
+      - name: Upload verified backend for full-stack acceptance
+        uses: actions/upload-artifact@v4
+        with:
+          name: verified-backend
+          path: backend/target/backend-*.jar
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Generate coverage report even after test failures
         if: ${{ !cancelled() }}
         run: ./mvnw -B jacoco:report
@@ -158,6 +166,7 @@ jobs:
           retention-days: 14
 
   frontend-e2e-critical:
+    needs: [backend-openapi]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     defaults:
@@ -197,6 +206,35 @@ jobs:
           E2E_FIXED_DATE: '2026-03-20'
           E2E_FIXED_TIMESTAMP: '2026-03-20T18:00:00.000Z'
         run: npm run test:e2e:critical
+
+      - name: Set up Java for real full-stack acceptance
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Download verified backend
+        uses: actions/download-artifact@v4
+        with:
+          name: verified-backend
+          path: backend/target
+
+      - name: Verify real services, restart and database restore
+        shell: bash
+        run: |
+          set -o pipefail
+          jars=(../backend/target/backend-*.jar)
+          export ACCEPTANCE_JAR="$(realpath "${jars[0]}")"
+          ../scripts/fullstack-acceptance.sh | tee fullstack-acceptance.log
+
+      - name: Upload full-stack acceptance result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fullstack-acceptance
+          path: frontend/fullstack-acceptance.log
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Upload Playwright results
         if: always()

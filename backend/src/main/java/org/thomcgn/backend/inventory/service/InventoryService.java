@@ -169,6 +169,12 @@ public class InventoryService {
 
     @Transactional
     public InventoryItem deductForOrderItem(DrinkVariant variant, BigDecimal amountMl, String referenceId) {
+        return deductForOrderItem(variant, amountMl, referenceId, null);
+    }
+
+    @Transactional
+    public InventoryItem deductForOrderItem(DrinkVariant variant, BigDecimal amountMl, String referenceId,
+            java.time.LocalDate saleDate) {
         InventoryItem inventoryItem = findInventoryItemForVariantForUpdate(variant);
         BigDecimal amountInInventoryUnit = convertAmountMlToInventoryUnit(amountMl, inventoryItem);
         assertAvailable(inventoryItem, amountInInventoryUnit, variant.getId());
@@ -192,13 +198,23 @@ public class InventoryService {
         );
 
         BigDecimal quantity = amountMl.divide(BigDecimal.valueOf(variant.getVolumeMl()), 4, RoundingMode.HALF_UP);
-        recordSaleAndUpdateReorder(variant, quantity, amountMl, inventoryItem);
+        if (saleDate == null) recordSaleAndUpdateReorder(variant, quantity, amountMl, inventoryItem);
+        else {
+            drinkSalesTrackingService.recordSale(variant, quantity, amountMl, saleDate);
+            reorderCalculationService.calculateReorderAmount(inventoryItem);
+        }
 
         return inventoryItem;
     }
 
     @Transactional
     public InventoryItem restockForCancelledOrderItem(DrinkVariant variant, BigDecimal amountMl, String referenceId) {
+        return restockForCancelledOrderItem(variant, amountMl, referenceId, null);
+    }
+
+    @Transactional
+    public InventoryItem restockForCancelledOrderItem(DrinkVariant variant, BigDecimal amountMl, String referenceId,
+            java.time.LocalDate originalBusinessDate) {
         InventoryItem inventoryItem = findInventoryItemForVariantForUpdate(variant);
         BigDecimal amountInInventoryUnit = convertAmountMlToInventoryUnit(amountMl, inventoryItem);
         inventoryItem.setTotalStockAmount(inventoryItem.getTotalStockAmount().add(amountInInventoryUnit));
@@ -215,7 +231,8 @@ public class InventoryService {
                 "system"
         );
         BigDecimal quantity = amountMl.divide(BigDecimal.valueOf(variant.getVolumeMl()), 4, RoundingMode.HALF_UP);
-        drinkSalesTrackingService.reverseSale(variant, quantity, amountMl);
+        if (originalBusinessDate == null) drinkSalesTrackingService.reverseSale(variant, quantity, amountMl);
+        else drinkSalesTrackingService.reverseSale(variant, quantity, amountMl, originalBusinessDate);
         reorderCalculationService.calculateReorderAmount(inventoryItem);
         return inventoryItem;
     }

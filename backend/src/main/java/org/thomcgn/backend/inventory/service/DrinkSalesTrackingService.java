@@ -28,6 +28,7 @@ public class DrinkSalesTrackingService {
     private final DrinkSalesDailyRepository drinkSalesDailyRepository;
     private final DrinkSalesWeeklyRepository drinkSalesWeeklyRepository;
     private final SalesConfigurationService salesConfigurationService;
+    private final org.thomcgn.backend.common.persistence.BookingMutationLock bookingLock;
 
     /**
      * Records a sale of a drink variant.
@@ -35,27 +36,37 @@ public class DrinkSalesTrackingService {
      */
     @Transactional
     public void recordSale(DrinkVariant drinkVariant, BigDecimal quantity, BigDecimal volumeMl) {
-        if (quantity.signum() <= 0 || volumeMl.signum() <= 0) {
+        recordSale(drinkVariant, quantity, volumeMl, salesConfigurationService.getCurrentBusinessDate());
+    }
+
+    @Transactional
+    public void recordSale(DrinkVariant drinkVariant, BigDecimal quantity, BigDecimal volumeMl, LocalDate saleDate) {
+        if (quantity.signum() <= 0 || volumeMl.signum() <= 0 || saleDate == null) {
             throw new ConflictException("Sale quantity and volume must be positive");
         }
-        adjustDailySale(drinkVariant, quantity, volumeMl, false);
+        adjustDailySale(drinkVariant, quantity, volumeMl, false, saleDate);
     }
 
     @Transactional
     public void reverseSale(DrinkVariant drinkVariant, BigDecimal quantity, BigDecimal volumeMl) {
-        if (quantity.signum() <= 0 || volumeMl.signum() <= 0) {
-            throw new ConflictException("Sale reversal quantity and volume must be positive");
+        reverseSale(drinkVariant, quantity, volumeMl, salesConfigurationService.getCurrentBusinessDate());
+    }
+
+    @Transactional
+    public void reverseSale(DrinkVariant drinkVariant, BigDecimal quantity, BigDecimal volumeMl, LocalDate originalDate) {
+        if (quantity.signum() <= 0 || volumeMl.signum() <= 0 || originalDate == null) {
+            throw new ConflictException("Sale reversal requires positive amounts and the original date");
         }
-        adjustDailySale(drinkVariant, quantity.negate(), volumeMl.negate(), true);
+        adjustDailySale(drinkVariant, quantity.negate(), volumeMl.negate(), true, originalDate);
     }
 
     private void adjustDailySale(
             DrinkVariant drinkVariant,
             BigDecimal quantityDelta,
             BigDecimal volumeDeltaMl,
-            boolean existingRequired
+            boolean existingRequired, LocalDate today
     ) {
-        LocalDate today = salesConfigurationService.getCurrentBusinessDate();
+        bookingLock.acquire();
         Drink drink = drinkVariant.getDrink();
         Optional<DrinkSalesDaily> existingDaily = drinkSalesDailyRepository
                 .findByDrinkIdAndDrinkVariantIdAndSaleDate(drink.getId(), drinkVariant.getId(), today);
@@ -80,27 +91,30 @@ public class DrinkSalesTrackingService {
         }
         dailySale.setQuantitySold(quantity);
         dailySale.setVolumeSoldMl(volume);
-        drinkSalesDailyRepository.save(dailySale);
+        drinkSalesDailyRepository.saveAndFlush(dailySale);
+        if (drinkSalesWeeklyRepository.findByDrinkIdAndDrinkVariantIdAndWeekStartDate(
+                drink.getId(), drinkVariant.getId(), getWeekStartDate(today)).isPresent()) aggregateToWeekly(dailySale);
         log.debug("Adjusted sale for variant {} on {}: {} qty, {} ml", drinkVariant.getId(), today, quantityDelta, volumeDeltaMl);
     }
 
     /**
      * Aggregates daily sales data into weekly summaries.
-     * Runs daily at 1:00 AM to process previous day's data.
+     * Runs daily at 05:15 Europe/Berlin and rebuilds all available weeks, including missed runs.
      */
     @Scheduled(cron = "0 15 5 * * *", zone = "Europe/Berlin")
     @Transactional
     public void aggregateDailyToWeekly() {
-        LocalDate previousBusinessDate = salesConfigurationService.getCurrentBusinessDate().minusDays(1);
-        log.info("Aggregating daily sales to weekly for business date: {}", previousBusinessDate);
-
-        List<DrinkSalesDaily> dailySales = drinkSalesDailyRepository.findBySaleDateBetween(previousBusinessDate, previousBusinessDate);
-
+        bookingLock.acquire();
+        var dailySales = drinkSalesDailyRepository.findAllForAggregation();
+        var processed = new java.util.HashSet<String>();
+        int unresolved = 0;
         for (DrinkSalesDaily daily : dailySales) {
-            aggregateToWeekly(daily);
+            if (daily.getDrinkVariant() == null) { unresolved++; continue; }
+            String key = daily.getDrinkVariant().getId() + ":" + getWeekStartDate(daily.getSaleDate());
+            if (processed.add(key)) aggregateToWeekly(daily);
         }
-
-        log.info("Completed aggregation of {} daily sales records", dailySales.size());
+        if (unresolved > 0) log.warn("sales_legacy_rows_unresolved count={}", unresolved);
+        log.info("sales_weeks_rebuilt count={}", processed.size());
     }
 
     /**
@@ -108,6 +122,8 @@ public class DrinkSalesTrackingService {
      */
     @Transactional
     public void aggregateToWeekly(DrinkSalesDaily daily) {
+        bookingLock.acquire();
+        if (daily.getDrinkVariant() == null) throw new ConflictException("Legacy sale variant requires reconciliation");
         LocalDate weekStart = getWeekStartDate(daily.getSaleDate());
         Drink drink = daily.getDrink();
         DrinkVariant variant = daily.getDrinkVariant();

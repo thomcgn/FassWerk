@@ -103,3 +103,19 @@ Reservierungsmails haben separate Zähler für `sent`, `failed` und `skipped`.
 Der öffentliche Health-Endpunkt zeigt keine internen Details.
 Scrape-Zugang, PromQL-Beispiele, Datenschutz und Diagnose:
 [Monitoring und Alerting](../docs/operations/monitoring-alerting.md).
+
+## Auditkorrekturen und Full-Stack-Abnahme
+
+[Auditbehebung](../docs/architecture/AUDIT_REMEDIATION.md) beschreibt die neuen
+Migrationen V26–V28, Geschäftstage, Session-Widerruf, Auth-Limits und verbleibende
+Altbestandsgrenzen. V26 widerruft einmalig bestehende Refresh-Sitzungen; beim
+Upgrade ist für alle Nutzer ein neuer Login erforderlich. Die Migration erfindet
+keine Verkaufstage alter Bonpositionen.
+Storno-Wiederholungen unterstützen jetzt ebenfalls `Idempotency-Key`.
+
+Nach `./mvnw -B clean verify` und dem Frontend-Production-Build startet
+`ACCEPTANCE_JAR=/absoluter/pfad/backend-0.0.1-SNAPSHOT.jar ../scripts/fullstack-acceptance.sh`
+eigene temporäre Dienste: zwei BFFs, Backend und PostgreSQL. Geprüft werden echte
+Fachaktionen, Antwortverlust, Neustart und ein synthetischer Dump/Restore.
+`./scripts/audit-preflight.sql` enthält ausschließlich lesende Prüfungen für eine
+separate V25+-Restore-Kopie; echte Produktionshistorien müssen zusätzlich geprüft werden.

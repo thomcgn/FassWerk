@@ -12,6 +12,21 @@ import java.util.List;
 import java.util.Optional;
 
 public interface TableOrderItemRepository extends JpaRepository<TableOrderItem, Long> {
+    @Query("""
+            select new org.thomcgn.backend.billing.application.ClosedRevenue(
+                o.closedBusinessDate, o.closedAt, sum(i.totalPrice), sum(i.deductedVolumeMl))
+            from TableOrderItem i join i.tableOrder o
+            where o.status = org.thomcgn.backend.billing.domain.TableOrderStatus.CLOSED and o.paid = true
+              and ((o.closedBusinessDate >= :startDate and o.closedBusinessDate < :endDate)
+                or (o.closedBusinessDate is null and o.closedAt >= :startTime and o.closedAt < :endTime))
+            group by o.closedBusinessDate, o.closedAt
+            """)
+    java.util.List<org.thomcgn.backend.billing.application.ClosedRevenue> businessRevenue(
+            java.time.LocalDate startDate, java.time.LocalDate endDate,
+            java.time.LocalDateTime startTime, java.time.LocalDateTime endTime);
+
+    java.util.Optional<TableOrderItem> findFirstByTableOrderIdAndDrinkVariantIdAndSaleBusinessDate(
+            Long orderId, Long variantId, java.time.LocalDate saleBusinessDate);
 
     List<TableOrderItem> findByTableOrderId(Long tableOrderId);
 

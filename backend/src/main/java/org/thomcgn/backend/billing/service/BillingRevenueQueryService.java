@@ -21,6 +21,21 @@ public class BillingRevenueQueryService implements BillingRevenueQueries {
     private final TableOrderItemRepository items;
 
     @Override
+    public List<org.thomcgn.backend.billing.application.BusinessDayRevenue> businessDays(
+            java.time.LocalDate start, java.time.LocalDate end) {
+        var days = new java.util.TreeMap<java.time.LocalDate, org.thomcgn.backend.billing.application.BusinessDayRevenue>();
+        for (var row : items.businessRevenue(start, end, start.atStartOfDay(), end.atStartOfDay())) {
+            var date = row.effectiveDate();
+            var previous = days.getOrDefault(date, new org.thomcgn.backend.billing.application.BusinessDayRevenue(
+                    date, BigDecimal.ZERO, BigDecimal.ZERO));
+            days.put(date, new org.thomcgn.backend.billing.application.BusinessDayRevenue(date,
+                    previous.revenue().add(row.revenue()),
+                    previous.consumedMl().add(row.consumedMl() == null ? BigDecimal.ZERO : row.consumedMl())));
+        }
+        return List.copyOf(days.values());
+    }
+
+    @Override
     public BigDecimal revenue(LocalDateTime start, LocalDateTime end) {
         return items.getRevenueByClosedRange(TableOrderStatus.CLOSED, start, end);
     }

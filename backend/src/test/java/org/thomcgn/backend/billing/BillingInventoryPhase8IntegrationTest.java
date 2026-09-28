@@ -33,17 +33,122 @@ import static org.mockito.Mockito.doThrow;
 class BillingInventoryPhase8IntegrationTest extends PostgresIntegrationTest {
     @Autowired JdbcTemplate jdbc;
     @Autowired TableOrderService orders;
+    @Autowired org.thomcgn.backend.report.service.RevenueReportService reports;
+    @Autowired org.thomcgn.backend.shift.service.ShiftSettlementService shifts;
     @Autowired InventoryService inventory;
+    @Autowired org.thomcgn.backend.inventory.service.ReorderOrderService deliveries;
     @Autowired DrinkSalesTrackingService salesTracking;
     @Autowired DrinkSalesDailyRepository dailySales;
     @Autowired InventoryInsightsApplicationService inventoryInsights;
     @Autowired MenuService menu;
     @MockitoSpyBean ReorderCalculationService reorderCalculations;
+    @Autowired org.thomcgn.backend.inventory.service.SalesConfigurationService businessSettings;
 
     @BeforeEach
     void fixtures() {
-        jdbc.execute("truncate table tables, drink_categories, inventory_items restart identity cascade");
+        jdbc.execute("truncate table tables, drink_categories, inventory_items, suppliers restart identity cascade");
         jdbc.update("insert into tables(name,status,active) values('T1','FREE',true),('T2','FREE',true)");
+    }
+
+    @Test
+    void closureUsesSameManualBusinessDateInReportShiftAndArchive() {
+        var previous = businessSettings.getConfiguration();
+        try {
+            var date = java.time.LocalDate.of(2035, 6, 1);
+            jdbc.update("update inventory_business_settings set manual_business_date=?", date);
+            long variant = stockedVariant("Night report", 250, "3.00", "10");
+            var order = orders.open(new OpenTableOrderRequest(1L, null));
+            orders.addItem(order.id(), new AddTableOrderItemRequest(variant, 2), "night-report-add");
+            orders.close(order.id());
+            assertThat(reports.getOverview().dayRevenue()).isEqualByComparingTo("6");
+            assertThat(shifts.getByDate(date).dailyRevenue()).isEqualByComparingTo("6");
+            assertThat(shifts.getByDate(date.plusDays(1)).dailyRevenue()).isEqualByComparingTo("0");
+            assertThat(orders.searchArchive(date, null, "PAID")).extracting(TableOrderResponse::id).contains(order.id());
+            assertThat(orders.searchArchive(date.plusDays(1), null, "PAID")).isEmpty();
+            jdbc.update("update inventory_business_settings set manual_business_date=?", date.plusDays(1));
+            assertThat(reports.getOverview().dayRevenue()).isEqualByComparingTo("0");
+            assertThat(shifts.getByDate(date).dailyRevenue()).isEqualByComparingTo("6");
+        } finally { businessSettings.updateConfiguration(previous); }
+    }
+
+    @Test
+    void concurrentDeliveryReceiptsIncreaseStockExactlyOnceAndCannotBeReverted() throws Exception {
+        long variant = stockedVariant("Delivery", 250, "3.00", "10");
+        long delivery = delivery(variant, "MILLILITER", "2000");
+        var first = java.util.concurrent.CompletableFuture.runAsync(() -> deliveries.updateReorderStatus(delivery, "RECEIVED"));
+        var second = java.util.concurrent.CompletableFuture.runAsync(() -> deliveries.updateReorderStatus(delivery, "RECEIVED"));
+        first.get(); second.get();
+        assertThat(stock(variant)).isEqualByComparingTo("12");
+        assertThat(jdbc.queryForObject("select count(*) from inventory_movements where operation_key=?", Integer.class,
+                "reorder-receive:" + delivery)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("select received_quantity from reorder_orders where id=?", BigDecimal.class, delivery)).isEqualByComparingTo("2000");
+        assertThatThrownBy(() -> deliveries.updateReorderStatus(delivery, "PENDING")).isInstanceOf(ConflictException.class);
+    }
+
+    @Test
+    void invalidDeliveryUnitLeavesStockAndStatusUntouched() {
+        long variant = stockedVariant("Invalid delivery", 250, "3.00", "10");
+        long delivery = delivery(variant, "PIECE", "2");
+        assertThatThrownBy(() -> deliveries.updateReorderStatus(delivery, "RECEIVED"))
+                .isInstanceOf(org.thomcgn.backend.common.exception.BadRequestException.class);
+        assertThat(stock(variant)).isEqualByComparingTo("10");
+        assertThat(jdbc.queryForObject("select status from reorder_orders where id=?", String.class, delivery)).isEqualTo("PENDING");
+        assertThat(jdbc.queryForObject("select count(*) from inventory_movements where operation_key=?", Integer.class,
+                "reorder-receive:" + delivery)).isZero();
+    }
+
+    private long delivery(long variant, String unit, String amount) {
+        long item = jdbc.queryForObject("select id from inventory_items where linked_drink_variant_id=?", Long.class, variant);
+        long supplier = jdbc.queryForObject("insert into suppliers(name,active) values('Audit supplier',true) returning id", Long.class);
+        return deliveries.createReorderOrder(new org.thomcgn.backend.inventory.api.dto.ReorderOrderRequest(
+                item, supplier, new BigDecimal(amount), unit, java.time.LocalDate.of(2035, 1, 1), null, null)).id();
+    }
+
+    @Test
+    void schedulerCommitsHealthyItemAfterAnotherItemDatabaseFailure() {
+        long broken = stockedVariant("Broken scheduler", 250, "3.00", "10");
+        long healthy = stockedVariant("Healthy scheduler", 250, "3.00", "10");
+        org.mockito.Mockito.doAnswer(call -> {
+            org.thomcgn.backend.inventory.domain.InventoryItem item = call.getArgument(0);
+            if (item.getLinkedDrinkVariant().getId().equals(broken)) jdbc.queryForObject("select 1 / 0", Integer.class);
+            return call.callRealMethod();
+        }).when(reorderCalculations).calculateReorderAmount(any());
+        assertThatCode(() -> reorderCalculations.recalculateAllInventoryItems()).doesNotThrowAnyException();
+        assertThat(jdbc.queryForObject("select count(*) from reorder_calculations c join inventory_items i on c.inventory_item_id=i.id where i.linked_drink_variant_id=?", Integer.class, healthy)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("select count(*) from reorder_calculations c join inventory_items i on c.inventory_item_id=i.id where i.linked_drink_variant_id=?", Integer.class, broken)).isZero();
+    }
+
+    @Test
+    void concurrentWeeklyJobsCatchUpOldWeeksAndPreserveUnattributableLegacyRows() throws Exception {
+        long variant = stockedVariant("Catch up", 250, "3.00", "10");
+        Long drink = jdbc.queryForObject("select drink_id from drink_variants where id=?",Long.class,variant);
+        jdbc.update("insert into drink_sales_daily(drink_id,drink_variant_id,sale_date,quantity_sold,volume_sold_ml) values(?,?,'2020-01-06',2,500)",drink,variant);
+        jdbc.update("insert into drink_sales_daily(drink_id,drink_variant_id,sale_date,quantity_sold,volume_sold_ml) values(?,null,'2020-01-06',1,250)",drink);
+        var first=java.util.concurrent.CompletableFuture.runAsync(() -> salesTracking.aggregateDailyToWeekly());
+        var second=java.util.concurrent.CompletableFuture.runAsync(() -> salesTracking.aggregateDailyToWeekly());
+        first.get(); second.get();
+        assertThat(jdbc.queryForObject("select quantity_sold from drink_sales_weekly where drink_variant_id=?", BigDecimal.class,variant)).isEqualByComparingTo("2");
+        assertThat(jdbc.queryForObject("select count(*) from drink_sales_daily where drink_variant_id is null", Integer.class)).isEqualTo(1);
+    }
+
+    @Test
+    void cancellationAfterBusinessDayChangeReversesOriginalDay() {
+        var previous = businessSettings.getConfiguration();
+        try {
+            long variant = stockedVariant("Cross day", 250, "3.00", "10");
+            jdbc.update("update inventory_business_settings set manual_business_date='2035-06-01'");
+            var order = orders.open(new OpenTableOrderRequest(1L, null));
+            order = orders.addItem(order.id(), new AddTableOrderItemRequest(variant, 2), "cross-day-add");
+            long originalItem = order.items().getFirst().id();
+            jdbc.update("update inventory_business_settings set manual_business_date='2035-06-02'");
+            order = orders.addItem(order.id(), new AddTableOrderItemRequest(variant, 1), "next-day-add");
+            assertThat(order.items()).hasSize(2);
+            orders.removeItem(order.id(), originalItem, "cross-day-cancel");
+            orders.removeItem(order.id(), originalItem, "cross-day-cancel");
+            assertThat(jdbc.queryForObject("select quantity_sold from drink_sales_daily where sale_date='2035-06-01'", BigDecimal.class)).isEqualByComparingTo("1");
+            assertThat(jdbc.queryForObject("select quantity_sold from drink_sales_daily where sale_date='2035-06-02'", BigDecimal.class)).isEqualByComparingTo("1");
+            assertThat(stock(variant)).isEqualByComparingTo("9.5000");
+        } finally { businessSettings.updateConfiguration(previous); }
     }
 
     @Test

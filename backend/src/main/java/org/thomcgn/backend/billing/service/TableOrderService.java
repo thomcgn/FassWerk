@@ -24,7 +24,6 @@ import org.thomcgn.backend.inventory.service.InventoryService;
 import org.thomcgn.backend.menu.domain.DrinkVariant;
 import org.thomcgn.backend.menu.repository.DrinkVariantRepository;
 import org.thomcgn.backend.menu.repository.VolumePriceRepository;
-import org.thomcgn.backend.reservation.domain.Reservation;
 import org.thomcgn.backend.reservation.repository.ReservationRepository;
 import org.thomcgn.backend.table.domain.TableEntity;
 import org.thomcgn.backend.table.domain.TableStatus;
@@ -52,6 +51,7 @@ public class TableOrderService {
     private final DrinkVariantRepository drinkVariantRepository;
     private final VolumePriceRepository volumePriceRepository;
     private final InventoryService inventoryService;
+    private final org.thomcgn.backend.inventory.service.SalesConfigurationService businessSettings;
     private final org.thomcgn.backend.common.persistence.BookingMutationLock bookingLock;
     private final org.thomcgn.backend.reservation.application.ReservationTableUsage reservationUsage;
     private final org.springframework.context.ApplicationEventPublisher events;
@@ -73,7 +73,7 @@ public class TableOrderService {
         order.setTable(table);
         order.setStatus(TableOrderStatus.OPEN);
         order.setPaid(false);
-        order.setOpenedAt(LocalDateTime.now());
+        order.setOpenedAt(businessSettings.currentVenueTime());
 
         table.setStatus(TableStatus.OCCUPIED);
         tableRepository.save(table);
@@ -109,7 +109,8 @@ public class TableOrderService {
                         .orElse(variant.getPrice())
                 : variant.getPrice());
 
-        TableOrderItem savedItem = itemRepository.findFirstByTableOrderIdAndDrinkVariantId(order.getId(), variant.getId())
+        LocalDate saleDate = businessSettings.getCurrentBusinessDate();
+        TableOrderItem savedItem = itemRepository.findFirstByTableOrderIdAndDrinkVariantIdAndSaleBusinessDate(order.getId(), variant.getId(), saleDate)
                 .map(existingItem -> {
                     int newQuantity = existingItem.getQuantity() + request.quantity();
                     existingItem.setQuantity(newQuantity);
@@ -123,20 +124,29 @@ public class TableOrderService {
                     item.setTableOrder(order);
                     item.setDrinkVariant(variant);
                     item.setQuantity(request.quantity());
+                    item.setSaleBusinessDate(saleDate);
                     item.setUnitPrice(unitPrice);
                     item.setTotalPrice(Money.multiply(unitPrice, request.quantity()));
                     item.setDeductedVolumeMl(deductedVolumeMl);
                     return itemRepository.save(item);
                 });
 
-        inventoryService.deductForOrderItem(variant, deductedVolumeMl, savedItem.getId().toString());
+        inventoryService.deductForOrderItem(variant, deductedVolumeMl, savedItem.getId().toString(), saleDate);
         recordOperation(idempotencyKey, "ADD_ITEM", order, fingerprint, null);
         return toResponse(order);
     }
 
     @Transactional
     public TableOrderResponse removeItem(Long orderId, Long itemId) {
+        return removeItem(orderId, itemId, null);
+    }
+
+    @Transactional
+    public TableOrderResponse removeItem(Long orderId, Long itemId, String idempotencyKey) {
         bookingLock.acquire();
+        String fingerprint = org.thomcgn.backend.common.application.IdempotencyKeys.fingerprint(itemId.toString());
+        var replay = replay(idempotencyKey, "REMOVE_ITEM", orderId, fingerprint);
+        if (replay.isPresent()) return toResponse(replay.get().getOrder());
         TableOrder order = getOpenOrder(orderId);
         TableOrderItem item = itemRepository.findById(itemId)
                 .orElseThrow(() -> new NotFoundException("Table order item not found: " + itemId));
@@ -149,7 +159,9 @@ public class TableOrderService {
                 4,
                 RoundingMode.HALF_UP
         );
-        inventoryService.restockForCancelledOrderItem(item.getDrinkVariant(), unitDeductedVolume, item.getId().toString());
+        if (item.getSaleBusinessDate() == null) throw new ConflictException("Legacy sale date requires reconciliation before cancellation");
+        inventoryService.restockForCancelledOrderItem(item.getDrinkVariant(), unitDeductedVolume,
+                item.getId().toString(), item.getSaleBusinessDate());
 
         if (item.getQuantity() <= 1) {
             itemRepository.delete(item);
@@ -161,6 +173,7 @@ public class TableOrderService {
             itemRepository.save(item);
         }
 
+        recordOperation(idempotencyKey, "REMOVE_ITEM", order, fingerprint, null);
         return toResponse(order);
     }
 
@@ -173,7 +186,8 @@ public class TableOrderService {
         if (order.getStatus() != TableOrderStatus.OPEN) throw new ConflictException("Unpaid archived bill must be reopened before payment");
         order.setStatus(TableOrderStatus.CLOSED);
         order.setPaid(true);
-        order.setClosedAt(LocalDateTime.now());
+        order.setClosedAt(businessSettings.currentVenueTime());
+        order.setClosedBusinessDate(businessSettings.getCurrentBusinessDate());
 
         orderRepository.saveAndFlush(order);
         releaseAfterClose(order);
@@ -189,7 +203,8 @@ public class TableOrderService {
         if (order.getStatus() != TableOrderStatus.OPEN) throw new ConflictException("Paid bill cannot be archived as unpaid");
         order.setStatus(TableOrderStatus.CLOSED);
         order.setPaid(false);
-        order.setClosedAt(LocalDateTime.now());
+        order.setClosedAt(businessSettings.currentVenueTime());
+        order.setClosedBusinessDate(businessSettings.getCurrentBusinessDate());
 
         orderRepository.saveAndFlush(order);
         releaseAfterClose(order);
@@ -217,8 +232,9 @@ public class TableOrderService {
 
         order.setStatus(TableOrderStatus.OPEN);
         order.setPaid(false);
-        order.setOpenedAt(LocalDateTime.now());
+        order.setOpenedAt(businessSettings.currentVenueTime());
         order.setClosedAt(null);
+        order.setClosedBusinessDate(null);
 
         TableEntity table = order.getTable();
         table.setStatus(TableStatus.OCCUPIED);
@@ -254,34 +270,10 @@ public class TableOrderService {
                     .toList();
         }
 
-        LocalDate targetDate = date != null ? date : LocalDate.now();
+        LocalDate targetDate = date != null ? date : businessSettings.getCurrentBusinessDate();
         LocalDateTime start = targetDate.atStartOfDay();
         LocalDateTime end = targetDate.plusDays(1).atStartOfDay();
-
-        if (queryText == null) {
-            if (paid == null) {
-                return orderRepository.findAllByStatusAndClosedAtGreaterThanEqualAndClosedAtLessThanOrderByClosedAtDesc(
-                                TableOrderStatus.CLOSED,
-                                start,
-                                end
-                        )
-                        .stream()
-                        .map(this::toResponse)
-                        .toList();
-            }
-
-            return orderRepository.findAllByStatusAndPaidAndClosedAtGreaterThanEqualAndClosedAtLessThanOrderByClosedAtDesc(
-                            TableOrderStatus.CLOSED,
-                            paid,
-                            start,
-                            end
-                    )
-                    .stream()
-                    .map(this::toResponse)
-                    .toList();
-        }
-
-        return orderRepository.searchArchive(TableOrderStatus.CLOSED, start, end, queryText, paid)
+        return orderRepository.searchArchive(TableOrderStatus.CLOSED, targetDate, start, end, queryText, paid)
                 .stream()
                 .map(this::toResponse)
                 .toList();
@@ -336,7 +328,7 @@ public class TableOrderService {
             }
         }
 
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = businessSettings.currentVenueTime();
         TableOrder paidOrder = new TableOrder();
         paidOrder.setTable(openOrder.getTable());
         paidOrder.setReservation(openOrder.getReservation());
@@ -344,6 +336,7 @@ public class TableOrderService {
         paidOrder.setPaid(true);
         paidOrder.setOpenedAt(now);
         paidOrder.setClosedAt(now);
+        paidOrder.setClosedBusinessDate(businessSettings.getCurrentBusinessDate());
         TableOrder savedPaidOrder = orderRepository.save(paidOrder);
 
         for (Map.Entry<Long, Integer> splitEntry : requestedQuantitiesByItem.entrySet()) {
@@ -359,6 +352,7 @@ public class TableOrderService {
             paidItem.setTableOrder(savedPaidOrder);
             paidItem.setDrinkVariant(openItem.getDrinkVariant());
             paidItem.setQuantity(paidQuantity);
+            paidItem.setSaleBusinessDate(openItem.getSaleBusinessDate());
             paidItem.setUnitPrice(openItem.getUnitPrice());
             paidItem.setTotalPrice(Money.multiply(openItem.getUnitPrice(), paidQuantity));
             paidItem.setDeductedVolumeMl(unitDeductedVolume.multiply(BigDecimal.valueOf(paidQuantity)).setScale(4, RoundingMode.HALF_UP));
@@ -381,6 +375,7 @@ public class TableOrderService {
             openOrder.setStatus(TableOrderStatus.CLOSED);
             openOrder.setPaid(true);
             openOrder.setClosedAt(now);
+            openOrder.setClosedBusinessDate(businessSettings.getCurrentBusinessDate());
             persistedOpenOrder = orderRepository.saveAndFlush(openOrder);
             releaseAfterClose(persistedOpenOrder);
         }

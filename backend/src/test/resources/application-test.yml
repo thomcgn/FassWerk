@@ -17,6 +17,9 @@ app:
   qr:
     scan-base-url: http://localhost:8080
   auth:
+    rate-limit:
+      address-per-minute: 100000
+      identity-per-minute: 100000
     cleanup:
       enabled: false
       cron: "0 0 0 * * *"
