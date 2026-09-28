@@ -17,9 +17,13 @@ export async function setupDrinkWithLinkedInventoryViaUi(page: Page): Promise<Se
 
   await page.getByPlaceholder("z. B. Weine").fill("Bier Spezial");
   await page.getByRole("button", { name: "Kategorie speichern" }).click();
+  await expect(page.getByRole("main").getByText("Kategorie angelegt.", { exact: true })).toBeVisible();
 
   await page.getByPlaceholder(/Get.*1/i).fill(drinkName);
   await page.getByRole("button", { name: "Alle Getränke mit Variante speichern" }).click();
+  // A click only dispatches the async handler. Navigation before the final
+  // variant response can abort creation and leave inventory without a variant.
+  await expect(page.getByRole("main").getByText(/^1 Getränk und [1-9]\d* Varianten angelegt\.$/)).toBeVisible();
 
   await page.goto("/inventory");
   await page.getByRole("heading", { name: "Lagerbestand kompakt" }).waitFor();
