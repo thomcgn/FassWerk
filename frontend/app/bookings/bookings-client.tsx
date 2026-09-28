@@ -11,18 +11,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FullCalendarBookings } from "@/components/full-calendar-bookings";
 import { useToastFeedback } from "@/lib/use-toast-feedback";
+import { parseJsonResponse, readApiError } from "@/lib/api-client";
+import { parseReservation, parseReservations, parseReservationSettings } from "@/features/reservation/model";
 import type { CreateReservationRequest, Reservation, ReservationSettings } from "@/types/api";
 
 type LoadState = "loading" | "ready" | "error";
 type Props = { isAuthenticated: boolean };
 
-type ApiErrorPayload = { message?: string; error?: string };
 const nowDate = new Date().toISOString().slice(0, 10);
-
-async function readErrorMessage(response: Response, fallback: string): Promise<string> {
-  const payload = (await response.json().catch(() => ({}))) as ApiErrorPayload;
-  return payload.message || payload.error || fallback;
-}
 
 export default function BookingsClient({ isAuthenticated }: Props) {
   const router = useRouter();
@@ -49,7 +45,7 @@ export default function BookingsClient({ isAuthenticated }: Props) {
   useEffect(() => {
     let active = true;
     void fetch("/api/reservations/settings", { cache: "no-store" })
-      .then(async response => response.ok ? await response.json() as ReservationSettings : null)
+      .then(async response => response.ok ? await parseJsonResponse(response, parseReservationSettings, "Reservierungseinstellungen laden") : null)
       .then(data => {
         if (!active || !data || !Array.isArray(data.openingHours)) return;
         setSettings(data);
@@ -76,7 +72,7 @@ export default function BookingsClient({ isAuthenticated }: Props) {
           setState("error");
           return;
         }
-        const payload = (await response.json()) as Reservation[];
+        const payload = await parseJsonResponse(response, parseReservations, "Reservierungen laden");
         setReservations(payload.sort((a, b) => `${a.reservationDate}${a.reservationTime}`.localeCompare(`${b.reservationDate}${b.reservationTime}`)));
         setState("ready");
       } catch {
@@ -135,11 +131,11 @@ export default function BookingsClient({ isAuthenticated }: Props) {
       body: JSON.stringify(payload),
     });
     if (!response.ok) {
-      setError(await readErrorMessage(response, "Reservierung konnte nicht angelegt werden."));
+      setError(await readApiError(response, "Reservierung konnte nicht angelegt werden."));
       setSaving(false);
       return;
     }
-    const created = (await response.json()) as Reservation;
+    const created = await parseJsonResponse(response, parseReservation, "Reservierung speichern");
     setForm((current) => ({ ...current, guestName: "", contactEmail: "", contactPhone: "" }));
     setCreatedReservation(created);
     setSuccess(editingId ? "Reservierung aktualisiert." : "Reservierung gespeichert. Dein QR-Code ist sofort verfügbar.");
@@ -168,7 +164,7 @@ export default function BookingsClient({ isAuthenticated }: Props) {
     }
     const response = await fetch(`/api/reservations/${id}/${action}`, { method: "POST" });
     if (!response.ok) {
-      setError(await readErrorMessage(response, `Aktion ${action} fehlgeschlagen.`));
+      setError(await readApiError(response, `Aktion ${action} fehlgeschlagen.`));
       return;
     }
     setSuccess(action === "confirm" ? "Reservierung bestätigt." : "Reservierung eingecheckt. Tischbons sind geoeffnet.");
@@ -183,10 +179,10 @@ export default function BookingsClient({ isAuthenticated }: Props) {
       body: JSON.stringify({ reason: cancellationModal.reason.trim() }),
     });
     if (!response.ok) {
-      setError(await readErrorMessage(response, "Stornierung fehlgeschlagen."));
+      setError(await readApiError(response, "Stornierung fehlgeschlagen."));
       return;
     }
-    const updated = await response.json() as Reservation;
+    const updated = await parseJsonResponse(response, parseReservation, "Reservierung stornieren");
     setSuccess(updated.status === "CANCELLED" ? "Reservierung storniert." : "Reservierung abgelehnt.");
     setCancellationModal(null);
     await loadReservations(dateFilter);

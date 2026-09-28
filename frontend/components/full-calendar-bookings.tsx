@@ -12,8 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { CheckCircle2, X } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import type { Reservation } from "@/types/api";
-
-type ReservationStatus = Reservation["status"];
+import { groupReservationsByStatus, partitionReservations, statusVariant, toLocalDateTime } from "@/features/reservation/model";
 
 interface FullCalendarBookingsProps {
   reservations: Reservation[];
@@ -23,41 +22,6 @@ interface FullCalendarBookingsProps {
   setCancellationModal: (modal: { id: number; reason: string } | null) => void;
   onConfirmCancellation: () => Promise<void>;
   loading: boolean;
-}
-
-function statusVariant(status: ReservationStatus): "success" | "warning" | "destructive" | "muted" {
-  if (status === "CHECKED_IN") return "success";
-  if (status === "PENDING" || status === "CONFIRMED") return "warning";
-  if (status === "REJECTED" || status === "CANCELLED" || status === "NO_SHOW") return "destructive";
-  return "muted";
-}
-
-function toLocalDateTime(date: string, time: string): string {
-  const parsed = new Date(`${date}T${time}`);
-  if (Number.isNaN(parsed.getTime())) return `${date} ${time}`;
-  return parsed.toLocaleString("de-DE", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" });
-}
-
-function groupReservationsByStatus(reservations: Reservation[]): Record<ReservationStatus, Reservation[]> {
-  const grouped: Record<ReservationStatus, Reservation[]> = {
-    CONFIRMED: [],
-    PENDING: [],
-    CHECKED_IN: [],
-    REJECTED: [],
-    CANCELLED: [],
-    NO_SHOW: [],
-    EXPIRED: [],
-    COMPLETED: [],
-  };
-
-  reservations.forEach((res) => {
-    const status = res.status as ReservationStatus;
-    if (grouped[status]) {
-      grouped[status].push(res);
-    }
-  });
-
-  return grouped;
 }
 
 export function FullCalendarBookings({
@@ -90,15 +54,8 @@ export function FullCalendarBookings({
     [reservations],
   );
 
-  // Offene Reservierungen für Aktionen
-  const actionableReservations = useMemo(
-    () => reservations.filter((res) => res.status === "PENDING" || res.status === "CONFIRMED" || res.status === "CHECKED_IN"),
-    [reservations],
-  );
-
-  // Abgelehnte Reservierungen separat als read-only Liste
-  const rejectedReservations = useMemo(
-    () => reservations.filter((res) => ["REJECTED", "CANCELLED", "NO_SHOW", "EXPIRED", "COMPLETED"].includes(res.status)),
+  const { actionable: actionableReservations, closed: rejectedReservations } = useMemo(
+    () => partitionReservations(reservations),
     [reservations],
   );
 
@@ -266,7 +223,7 @@ function ResCard({
   onCancelClick: () => void;
   readOnly?: boolean;
 }) {
-  const variant = statusVariant(reservation.status as ReservationStatus);
+  const variant = statusVariant(reservation.status);
   const isPending = reservation.status === "PENDING";
   const canCheckIn = reservation.status === "CONFIRMED";
   const isReadOnly = readOnly ?? false;

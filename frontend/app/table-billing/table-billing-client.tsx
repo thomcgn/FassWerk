@@ -10,49 +10,18 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { TableDetailModal } from "@/components/table-detail-modal";
 import { useToastFeedback } from "@/lib/use-toast-feedback";
-import type { Drink, DrinkCategory, DrinkVariant, InventoryItem, SplitPaymentItemRequest, SplitPaymentResponse, Table, TableOrder } from "@/types/api";
+import { parseJsonResponse, readApiError } from "@/lib/api-client";
+import {
+  matchesBusinessDate, parseDrinkCategories, parseDrinks, parseDrinkVariants, parseInventoryItems,
+  parseSplitPayment, parseTable, parseTableOrder, parseTableOrders, parseTables, readCachedOrders,
+  selectSellableCatalog, sortByClosedAtDesc, tableStatusVariant, todayIsoDate, toCurrency, toGermanDateLabel,
+} from "@/features/billing/model";
+import type { Drink, DrinkCategory, DrinkVariant, SplitPaymentItemRequest, Table, TableOrder } from "@/types/api";
 
 type LoadState = "loading" | "ready" | "error";
 
 const UNPAID_ARCHIVE_STORAGE_KEY = "table-billing-unpaid-archive";
 const BUSINESS_DATE_STORAGE_KEY = "table-billing-business-date";
-
-function todayIsoDate(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function toGermanDateLabel(value: string): string {
-  if (!value) return "";
-  const parsed = new Date(`${value}T00:00:00`);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return new Intl.DateTimeFormat("de-DE", { dateStyle: "medium" }).format(parsed);
-}
-
-function toCurrency(value: string): string {
-  const amount = Number(value);
-  if (Number.isNaN(amount)) return `${value} EUR`;
-  return new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(amount);
-}
-
-function matchesBusinessDate(closedAt: string | null, businessDate: string): boolean {
-  if (!closedAt || !businessDate) return false;
-  return closedAt.slice(0, 10) === businessDate;
-}
-
-function sortByClosedAtDesc(entries: TableOrder[]): TableOrder[] {
-  return [...entries].sort((a, b) => {
-    const aTime = a.closedAt ? new Date(a.closedAt).getTime() : 0;
-    const bTime = b.closedAt ? new Date(b.closedAt).getTime() : 0;
-    return bTime - aTime;
-  });
-}
-
-function tableStatusVariant(status: Table["status"]): "success" | "warning" | "destructive" | "muted" {
-  if (status === "FREE") return "success";
-  if (status === "READY_FOR_PAYMENT") return "warning";
-  if (status === "RESERVED") return "muted";
-  return "destructive";
-}
 
 export default function TableBillingClient() {
   const router = useRouter();
@@ -74,12 +43,7 @@ export default function TableBillingClient() {
     if (typeof window === "undefined") return [];
     const raw = window.sessionStorage.getItem(UNPAID_ARCHIVE_STORAGE_KEY);
     if (!raw) return [];
-    try {
-      const parsed = JSON.parse(raw) as TableOrder[];
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
+    return readCachedOrders(raw);
   });
   const [archiveError, setArchiveError] = useState<string | null>(null);
   const [businessDate, setBusinessDate] = useState(() => {
@@ -90,29 +54,6 @@ export default function TableBillingClient() {
 
   useToastFeedback(error, "error");
   useToastFeedback(status, "success");
-
-  const sellableVariants = useCallback((allVariants: DrinkVariant[], allInventoryItems: InventoryItem[]) => {
-    const activeItemsWithStock = allInventoryItems.filter((item) => item.active && Number(item.totalStockAmount) > 0);
-    const variantIdsWithStock = new Set<number>();
-    const drinkLinkCounts = new Map<number, number>();
-
-    for (const item of activeItemsWithStock) {
-      if (item.linkedDrinkVariantId != null) {
-        variantIdsWithStock.add(item.linkedDrinkVariantId);
-      }
-      if (item.linkedDrinkId != null) {
-        drinkLinkCounts.set(item.linkedDrinkId, (drinkLinkCounts.get(item.linkedDrinkId) ?? 0) + 1);
-      }
-    }
-
-    const fallbackDrinkIds = new Set(
-      Array.from(drinkLinkCounts.entries())
-        .filter(([, count]) => count === 1)
-        .map(([drinkId]) => drinkId),
-    );
-
-    return allVariants.filter((variant) => variant.active && (variantIdsWithStock.has(variant.id) || fallbackDrinkIds.has(variant.drinkId)));
-  }, []);
 
   const loadMeta = useCallback(async () => {
     try {
@@ -135,32 +76,24 @@ export default function TableBillingClient() {
         return;
       }
 
-      const [tablesPayload, categoriesPayload, drinksPayload, variantsPayload, inventoryPayload] = (await Promise.all([
-        tablesResponse.json(),
-        categoriesResponse.json(),
-        drinksResponse.json(),
-        variantsResponse.json(),
-        inventoryResponse.json(),
-      ])) as [Table[], DrinkCategory[], Drink[], DrinkVariant[], InventoryItem[]];
-
-      const sellable = sellableVariants(variantsPayload, inventoryPayload);
-      const sellableDrinkIds = new Set(sellable.map((variant) => variant.drinkId));
-      const sellableCategoryIds = new Set(
-        drinksPayload
-          .filter((drink) => sellableDrinkIds.has(drink.id))
-          .map((drink) => drink.categoryId),
-      );
-
+      const [tablesPayload, categoriesPayload, drinksPayload, variantsPayload, inventoryPayload] = await Promise.all([
+        parseJsonResponse(tablesResponse, parseTables, "Tische laden"),
+        parseJsonResponse(categoriesResponse, parseDrinkCategories, "Kategorien laden"),
+        parseJsonResponse(drinksResponse, parseDrinks, "Getränke laden"),
+        parseJsonResponse(variantsResponse, parseDrinkVariants, "Varianten laden"),
+        parseJsonResponse(inventoryResponse, parseInventoryItems, "Bestand laden"),
+      ]);
+      const catalog = selectSellableCatalog(variantsPayload, inventoryPayload, drinksPayload, categoriesPayload);
       setTables(tablesPayload.filter((table) => table.active));
-      setVariants(sellable);
-      setDrinks(drinksPayload.filter((drink) => drink.active && sellableDrinkIds.has(drink.id)));
-      setCategories(categoriesPayload.filter((category) => category.active && sellableCategoryIds.has(category.id)));
+      setVariants(catalog.variants);
+      setDrinks(catalog.drinks);
+      setCategories(catalog.categories);
       setState("ready");
     } catch {
       setError("Unerwarteter Fehler beim Laden der Stammdaten.");
       setState("error");
     }
-  }, [router, sellableVariants]);
+  }, [router]);
 
   const loadUnpaidArchive = useCallback(async (dateOverride?: string) => {
     try {
@@ -175,23 +108,17 @@ export default function TableBillingClient() {
       }
 
       if (!response.ok) {
-        const payload = (await response.json().catch(() => ({}))) as { message?: string; error?: string };
-        const detail = payload.message ?? payload.error ?? `HTTP ${response.status}`;
+        const detail = await readApiError(response, `HTTP ${response.status}`);
         setArchiveError(`Archiv konnte nicht geladen werden (${detail}).`);
 
         const cached = window.sessionStorage.getItem(UNPAID_ARCHIVE_STORAGE_KEY);
         if (cached) {
-          try {
-            const parsed = JSON.parse(cached) as TableOrder[];
-            setUnpaidArchive(Array.isArray(parsed) ? parsed : []);
-          } catch {
-            // ignore invalid cache payload
-          }
+          setUnpaidArchive(readCachedOrders(cached));
         }
         return;
       }
 
-      const payload = sortByClosedAtDesc((await response.json()) as TableOrder[]);
+      const payload = sortByClosedAtDesc(await parseJsonResponse(response, parseTableOrders, "Archiv laden"));
       setUnpaidArchive(payload);
       window.sessionStorage.setItem(UNPAID_ARCHIVE_STORAGE_KEY, JSON.stringify(payload));
       if (targetDate) {
@@ -202,12 +129,7 @@ export default function TableBillingClient() {
 
       const cached = window.sessionStorage.getItem(UNPAID_ARCHIVE_STORAGE_KEY);
       if (cached) {
-        try {
-          const parsed = JSON.parse(cached) as TableOrder[];
-          setUnpaidArchive(Array.isArray(parsed) ? parsed : []);
-        } catch {
-          // ignore invalid cache payload
-        }
+        setUnpaidArchive(readCachedOrders(cached));
       }
     }
   }, [businessDate, router]);
@@ -247,7 +169,7 @@ export default function TableBillingClient() {
 
     const openResponse = await fetch(`/api/table-orders/open/table/${table.id}`, { cache: "no-store" });
     if (openResponse.ok) {
-      const payload = (await openResponse.json()) as TableOrder;
+      const payload = await parseJsonResponse(openResponse, parseTableOrder, "Bon laden");
       setOrder(payload);
       setOrderLookupId(String(payload.id));
       setIsModalOpen(true);
@@ -256,8 +178,7 @@ export default function TableBillingClient() {
     }
 
     if (openResponse.status !== 404) {
-      const payload = (await openResponse.json().catch(() => ({}))) as { message?: string };
-      setError(payload.message ?? "Tisch konnte nicht geladen werden.");
+      setError(await readApiError(openResponse, "Tisch konnte nicht geladen werden."));
       return;
     }
 
@@ -268,12 +189,11 @@ export default function TableBillingClient() {
     });
 
     if (!createResponse.ok) {
-      const payload = (await createResponse.json().catch(() => ({}))) as { message?: string };
-      setError(payload.message ?? "Tisch konnte nicht geöffnet werden.");
+      setError(await readApiError(createResponse, "Tisch konnte nicht geöffnet werden."));
       return;
     }
 
-    const payload = (await createResponse.json()) as TableOrder;
+    const payload = await parseJsonResponse(createResponse, parseTableOrder, "Tisch öffnen");
     setOrder(payload);
     setOrderLookupId(String(payload.id));
     setIsModalOpen(true);
@@ -289,7 +209,7 @@ export default function TableBillingClient() {
       setError("Tischbon wurde nicht gefunden.");
       return;
     }
-    const payload = (await response.json()) as TableOrder;
+    const payload = await parseJsonResponse(response, parseTableOrder, "Bon verarbeiten");
     setOrder(payload);
     setSelectedTableId(String(payload.tableId));
     setIsModalOpen(true);
@@ -306,11 +226,10 @@ export default function TableBillingClient() {
       body: JSON.stringify({ drinkVariantId, quantity }),
     });
     if (!response.ok) {
-      const payload = (await response.json().catch(() => ({}))) as { message?: string };
-      setError(payload.message ?? "Position konnte nicht hinzugefügt werden.");
+      setError(await readApiError(response, "Position konnte nicht hinzugefügt werden."));
       return;
     }
-    const payload = (await response.json()) as TableOrder;
+    const payload = await parseJsonResponse(response, parseTableOrder, "Bon verarbeiten");
     setOrder(payload);
     setStatus(`${quantity}x Position hinzugefügt.`);
   }
@@ -324,7 +243,7 @@ export default function TableBillingClient() {
       setError("Position konnte nicht entfernt werden.");
       return;
     }
-    const payload = (await response.json()) as TableOrder;
+    const payload = await parseJsonResponse(response, parseTableOrder, "Bon verarbeiten");
     setOrder(payload);
     setStatus("Position entfernt.");
   }
@@ -338,7 +257,7 @@ export default function TableBillingClient() {
       setError("Bezahlung konnte nicht abgeschlossen werden.");
       return;
     }
-    const payload = (await response.json()) as TableOrder;
+    const payload = await parseJsonResponse(response, parseTableOrder, "Bon verarbeiten");
     setOrder(null);
     setSelectedTableId("");
     setStatus(`Bon #${payload.id} bezahlt. Betrag ${toCurrency(payload.total)} wurde in die Umsatzauswertung uebernommen.`);
@@ -354,12 +273,11 @@ export default function TableBillingClient() {
 
     const response = await fetch(`/api/table-orders/${order.id}/mark-unpaid`, { method: "POST" });
     if (!response.ok) {
-      const payload = (await response.json().catch(() => ({}))) as { message?: string };
-      setError(payload.message ?? "Bon konnte nicht zurückgestellt werden.");
+      setError(await readApiError(response, "Bon konnte nicht zurückgestellt werden."));
       return;
     }
 
-    const payload = (await response.json()) as TableOrder;
+    const payload = await parseJsonResponse(response, parseTableOrder, "Bon verarbeiten");
     if (matchesBusinessDate(payload.closedAt, businessDate)) {
       setUnpaidArchive((current) => [payload, ...current.filter((entry) => entry.id !== payload.id)]);
     }
@@ -378,12 +296,11 @@ export default function TableBillingClient() {
 
     const response = await fetch(`/api/table-orders/${order.id}/reopen-unpaid`, { method: "POST" });
     if (!response.ok) {
-      const payload = (await response.json().catch(() => ({}))) as { message?: string };
-      setError(payload.message ?? "Bon konnte nicht wieder geoeffnet werden.");
+      setError(await readApiError(response, "Bon konnte nicht wieder geoeffnet werden."));
       return;
     }
 
-    const payload = (await response.json()) as TableOrder;
+    const payload = await parseJsonResponse(response, parseTableOrder, "Bon verarbeiten");
     setOrder(payload);
     setSelectedTableId(String(payload.tableId));
     setStatus(`Bon #${payload.id} wurde wieder geoeffnet und kann jetzt bezahlt werden.`);
@@ -397,12 +314,11 @@ export default function TableBillingClient() {
 
     const response = await fetch(`/api/table-orders/${orderId}/reopen-unpaid`, { method: "POST" });
     if (!response.ok) {
-      const payload = (await response.json().catch(() => ({}))) as { message?: string };
-      setError(payload.message ?? "Bon konnte nicht wieder geoeffnet werden.");
+      setError(await readApiError(response, "Bon konnte nicht wieder geoeffnet werden."));
       return;
     }
 
-    const payload = (await response.json()) as TableOrder;
+    const payload = await parseJsonResponse(response, parseTableOrder, "Bon verarbeiten");
     setOrder(payload);
     setOrderLookupId(String(payload.id));
     setSelectedTableId(String(payload.tableId));
@@ -428,12 +344,11 @@ export default function TableBillingClient() {
     });
 
     if (!response.ok) {
-      const payload = (await response.json().catch(() => ({}))) as { message?: string };
-      setError(payload.message ?? "Teilzahlung konnte nicht durchgeführt werden.");
+      setError(await readApiError(response, "Teilzahlung konnte nicht durchgeführt werden."));
       return;
     }
 
-    const payload = (await response.json()) as SplitPaymentResponse;
+    const payload = await parseJsonResponse(response, parseSplitPayment, "Teilzahlung");
     setOrder(payload.openOrder);
     setStatus(`Teilzahlung als Bon #${payload.paidOrder.id} erfasst: ${toCurrency(payload.paidOrder.total)}.`);
 
@@ -467,13 +382,12 @@ export default function TableBillingClient() {
     });
 
     if (!response.ok) {
-      const payload = (await response.json().catch(() => ({}))) as { message?: string; error?: string };
-      setError(payload.message || payload.error || "Tisch konnte nicht angelegt werden.");
+      setError(await readApiError(response, "Tisch konnte nicht angelegt werden."));
       setCreatingTable(false);
       return;
     }
 
-    const payload = (await response.json()) as Table;
+    const payload = await parseJsonResponse(response, parseTable, "Tisch anlegen");
     setNewTableName("");
     setNewTableArea("INSIDE");
     setStatus(`Tisch ${payload.name} wurde für ${toGermanDateLabel(businessDate)} angelegt.`);

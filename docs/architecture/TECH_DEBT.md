@@ -250,3 +250,17 @@ behavior need explicit reconciliation, not an automatic rewrite of financial dat
 Details: [BILLING_INVENTORY_RULES.md](BILLING_INVENTORY_RULES.md),
 [PHASE_8_REPORT.md](PHASE_8_REPORT.md). TD-020, Cross-Day-Sales-Attribution,
 Legacy-NULL-Aggregate, globale Lock-Skalierung und Wareneingangssemantik bleiben offen.
+
+## Fortschritt nach Phase 9 (2026-09-28)
+
+| ID | Status nach Phase 9 |
+| --- | --- |
+| TD-027 | Teilweise behoben: Fachberechnungen und Laufzeitparser fuer Reservation, Billing, Inventory und Catalog liegen in Feature-Modellen; zentrale API-Fehlerauswertung sowie App-Router Error-/Loading-Boundaries sind vorhanden. Grosse Screen-Composers bleiben fuer eine spaetere panelweise Zerlegung; Assertions in sekundaeren Bereichen bleiben bis zur Phase-10-Vertragsentscheidung offen. |
+| TD-033 | Behoben: tote Inventory-/Reorder-Symbole entfernt; ESLint meldet 0 Fehler und 0 Warnungen, ohne neue Ignore-Regeln. `skipLibCheck=true` bleibt separat bestehen. |
+| TD-020 | Unveraendert: ignorierte numerische Sales-Konfigurationsfelder sind ein Backend-/API-Vertragsproblem, nicht durch UI-Umschichtung behoben. |
+| TD-005 | Unveraendert: kein `npm audit fix --force`; die in Phase 8 dokumentierten Abhaengigkeitsbefunde muessen gezielt bewertet werden. |
+
+Details: [FRONTEND_ARCHITECTURE.md](FRONTEND_ARCHITECTURE.md) und
+[PHASE_9_REPORT.md](PHASE_9_REPORT.md). Sieben schnelle Fachmodelltests und die
+bestehenden drei Security-Tests ergaenzen Build, TypeScript, Lint und 18 kritische
+Browserfaelle.

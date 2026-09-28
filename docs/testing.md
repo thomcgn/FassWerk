@@ -243,3 +243,24 @@ weekly retry behavior, reorder units and preservation of paid history.
 a correctness assertion. `BillingInventoryMigrationTest` upgrades V24 to V25 and
 checks precision plus the nonnegative-stock database guard. The complete gate is
 `cd backend && ./mvnw -B clean verify`; Docker is required.
+
+## Phase 9 Frontend Architecture
+
+Pure reservation, billing, inventory and catalog rules use Node's native runner:
+
+```bash
+cd frontend
+npm run test:unit
+npm run test:security
+npm run lint
+npx tsc --noEmit
+npm run build
+npm run test:e2e:critical
+```
+
+`frontend-models.test.mjs` covers stocked-variant selection including the unique
+fallback rule, malformed archive rejection and sorting, crate/unit conversion,
+threshold status, batch normalization/deduplication/volume validation, rounded
+price changes and reservation status partitioning. Runtime response parsers protect
+the refactored feature boundaries. The native TypeScript imports require Node
+>= 22.6 and currently retain the documented package-type warning.

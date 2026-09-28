@@ -10,11 +10,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { useToastFeedback } from "@/lib/use-toast-feedback";
-import { ReorderDashboard } from "@/components/reorder-dashboard";
+import { parseJsonResponse, readApiError } from "@/lib/api-client";
+import {
+  calculateCrateContentPerPackage, contentDefaultsByType, formatStockForArticle, formatThresholdPackages,
+  getInventoryStatus, isContentUnit, isPackageType, packageAmountLabel, packageAmountLabelLower, packageTypeLabel,
+  parseDrinkVariants, parseDrinks, parseInventoryItems, parseInventoryPackageDefaults, parseOptionalId,
+  shortUnit, unitLabel,
+} from "@/features/inventory/model";
+import type { ContentUnit, PackageType } from "@/features/inventory/model";
 import type { Drink, DrinkVariant, InventoryItem, InventoryItemUpsertRequest, InventoryPackageDefaults } from "@/types/api";
 
 type LoadState = "loading" | "ready" | "error";
-type PackageType = InventoryItemUpsertRequest["packageType"];
 const INVENTORY_CONFIG_VISIBILITY_KEY = "inventory.config.visible";
 
 const crateDefaults = {
@@ -22,192 +28,20 @@ const crateDefaults = {
   litersPerBottle: "0.75",
 };
 
-const contentDefaultsByType: Record<PackageType, { contentUnit: "LITER" | "PIECE" | "MILLILITER"; contentPerPackage: string }> = {
-  BARREL: { contentUnit: "LITER", contentPerPackage: "50" },
-  CRATE: { contentUnit: "LITER", contentPerPackage: "4.5" },
-  BOTTLE: { contentUnit: "LITER", contentPerPackage: "0.5" },
-  SINGLE_BOTTLE: { contentUnit: "LITER", contentPerPackage: "0.3" },
-  BOX: { contentUnit: "PIECE", contentPerPackage: "1" },
+type InventoryForm = {
+  name: string;
+  linkedDrinkId: string;
+  linkedDrinkVariantId: string;
+  packageType: PackageType;
+  packagesInStock: string;
+  contentPerPackage: string;
+  contentUnit: ContentUnit;
+  reorderThresholdPackages: string;
+  minimumStockPackages: string;
+  bottlesPerCrate: string;
+  litersPerBottle: string;
+  supplier: string;
 };
-
-function parseLocaleNumber(value: string): number {
-  return Number(value.replace(",", "."));
-}
-
-function calculateCrateContentPerPackage(contentUnit: "LITER" | "PIECE" | "MILLILITER" | string, bottlesPerCrate: string, litersPerBottle: string): string {
-  const bottles = parseLocaleNumber(bottlesPerCrate);
-  const liters = parseLocaleNumber(litersPerBottle);
-  if (!Number.isFinite(bottles) || bottles <= 0) {
-    return "0";
-  }
-  if (contentUnit === "PIECE") {
-    return String(bottles);
-  }
-  if (!Number.isFinite(liters) || liters <= 0) {
-    return "0";
-  }
-  if (contentUnit === "MILLILITER") {
-    return String(bottles * liters * 1000);
-  }
-  return String(bottles * liters);
-}
-
-function packageAmountLabelLower(value: InventoryItemUpsertRequest["packageType"] | string): string {
-  const label = packageAmountLabel(value);
-  return label.charAt(0).toLowerCase() + label.slice(1);
-}
-
-function getStatus(item: InventoryItem): { label: string; variant: "success" | "warning" | "destructive" | "muted" } {
-  if (!item.active) return { label: "Inaktiv", variant: "muted" };
-  const stock = Number(item.totalStockAmount);
-  const threshold = Number(item.reorderThreshold);
-  if (Number.isNaN(stock) || Number.isNaN(threshold) || stock <= threshold) {
-    return { label: "Nachbestellen", variant: "destructive" };
-  }
-  return { label: "Stabil", variant: "success" };
-}
-
-function packageTypeLabel(value: InventoryItemUpsertRequest["packageType"] | string): string {
-  switch (value) {
-    case "BARREL":
-      return "Fass";
-    case "CRATE":
-      return "Kasten";
-    case "BOTTLE":
-      return "Flasche";
-    case "SINGLE_BOTTLE":
-      return "Einzelflasche";
-    case "BOX":
-      return "Karton / Box";
-    default:
-      return value;
-  }
-}
-
-function packageAmountLabel(value: InventoryItemUpsertRequest["packageType"] | string): string {
-  switch (value) {
-    case "BARREL":
-      return "Faesser";
-    case "CRATE":
-      return "Kaesten";
-    case "BOTTLE":
-      return "Flaschen";
-    case "SINGLE_BOTTLE":
-      return "Einzelflaschen";
-    case "BOX":
-      return "Boxen";
-    default:
-      return "Gebinde";
-  }
-}
-
-function unitLabel(value: InventoryItemUpsertRequest["contentUnit"] | string): string {
-  if (value === "LITER") return "Liter (l)";
-  if (value === "PIECE") return "Stück";
-  if (value === "MILLILITER") return "Milliliter (ml)";
-  return value;
-}
-
-function shortUnit(value: string): string {
-  if (value === "LITER") return "l";
-  if (value === "PIECE") return "Stk";
-  if (value === "MILLILITER") return "ml";
-  return value;
-}
-
-function formatAmount(value: number): string {
-  if (!Number.isFinite(value)) {
-    return "-";
-  }
-  return new Intl.NumberFormat("de-DE", { maximumFractionDigits: 2 }).format(value);
-}
-
-function toMilliliter(value: number, unit: string): number | null {
-  if (!Number.isFinite(value)) {
-    return null;
-  }
-  if (unit === "MILLILITER") return value;
-  if (unit === "LITER") return value * 1000;
-  return null;
-}
-
-function formatStockForArticle(item: InventoryItem, variants: DrinkVariant[]): { primary: string; secondary: string } {
-  const total = Number(item.totalStockAmount);
-  const perPackage = Number(item.contentPerPackage);
-  const packageCount = Number.isFinite(total) && Number.isFinite(perPackage) && perPackage > 0 ? total / perPackage : NaN;
-  const baseUnitValue = Number.isFinite(total)
-    ? `${formatAmount(total)} ${shortUnit(item.contentUnit)}`
-    : `${item.totalStockAmount} ${shortUnit(item.contentUnit)}`;
-  const packageValue = Number.isFinite(packageCount)
-    ? `${formatAmount(packageCount)} ${packageAmountLabel(item.packageType)}`
-    : "-";
-
-  if (item.packageType === "CRATE" || item.packageType === "BOTTLE" || item.packageType === "SINGLE_BOTTLE") {
-    const linkedVariant = item.linkedDrinkVariantId != null
-      ? variants.find((variant) => variant.id === item.linkedDrinkVariantId)
-      : undefined;
-    if (linkedVariant && linkedVariant.volumeMl > 0) {
-      const totalMl = toMilliliter(total, item.contentUnit);
-      if (totalMl != null) {
-        return {
-          primary: `${formatAmount(totalMl / linkedVariant.volumeMl)} Flaschen`,
-          secondary: baseUnitValue,
-        };
-      }
-    }
-    if (Number.isFinite(packageCount)) {
-      return {
-        primary: packageValue,
-        secondary: baseUnitValue,
-      };
-    }
-  }
-
-  if (item.packageType === "BARREL" && Number.isFinite(packageCount)) {
-    return {
-      primary: `${formatAmount(packageCount)} ${packageAmountLabel(item.packageType)}`,
-      secondary: baseUnitValue,
-    };
-  }
-
-  if (item.packageType === "BOX") {
-    if (item.contentUnit === "PIECE" && Number.isFinite(total)) {
-      return {
-        primary: `${formatAmount(total)} Stk`,
-        secondary: packageValue,
-      };
-    }
-    if (Number.isFinite(packageCount)) {
-      return {
-        primary: packageValue,
-        secondary: baseUnitValue,
-      };
-    }
-  }
-
-  return {
-    primary: baseUnitValue,
-    secondary: packageValue,
-  };
-}
-
-function formatThresholdPackages(item: InventoryItem): string {
-  const threshold = Number(item.reorderThreshold);
-  const perPackage = Number(item.contentPerPackage);
-  if (!Number.isFinite(threshold) || !Number.isFinite(perPackage) || perPackage <= 0) {
-    return "-";
-  }
-  return new Intl.NumberFormat("de-DE", { maximumFractionDigits: 2 }).format(threshold / perPackage);
-}
-
-function parseOptionalId(value: string): number | null {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return null;
-  }
-  const parsed = Number(trimmed);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
-}
 
 export default function InventoryClient() {
   const router = useRouter();
@@ -226,7 +60,7 @@ export default function InventoryClient() {
   const [linkItemId, setLinkItemId] = useState("");
   const [showInventoryConfig, setShowInventoryConfig] = useState(false);
   const [inventoryConfigVisibilityInitialized, setInventoryConfigVisibilityInitialized] = useState(false);
-    const [form, setForm] = useState({
+  const [form, setForm] = useState<InventoryForm>({
     name: "",
     linkedDrinkId: "",
     linkedDrinkVariantId: "",
@@ -239,9 +73,7 @@ export default function InventoryClient() {
     bottlesPerCrate: crateDefaults.bottlesPerCrate,
     litersPerBottle: crateDefaults.litersPerBottle,
     supplier: "",
-    });
-
-    const [expandedItemId, setExpandedItemId] = useState<number | null>(null);
+  });
 
   useToastFeedback(error, "error");
   useToastFeedback(configError, "error");
@@ -278,7 +110,7 @@ export default function InventoryClient() {
         setState("error");
         return;
       }
-      const payload = (await response.json()) as InventoryItem[];
+      const payload = await parseJsonResponse(response, parseInventoryItems, "Inventory laden");
       setItems(payload);
       setLinkItemId((current) => current || String(payload[0]?.id ?? ""));
       setState("ready");
@@ -295,7 +127,7 @@ export default function InventoryClient() {
         setVariants([]);
         return;
       }
-      const payload = (await response.json()) as DrinkVariant[];
+      const payload = await parseJsonResponse(response, parseDrinkVariants, "Varianten laden");
       setVariants(payload.filter((variant) => variant.active));
     } catch {
       setVariants([]);
@@ -309,7 +141,7 @@ export default function InventoryClient() {
         setDrinks([]);
         return;
       }
-      const payload = (await response.json()) as Drink[];
+      const payload = await parseJsonResponse(response, parseDrinks, "Getränke laden");
       setDrinks(payload.filter((drink) => drink.active));
     } catch {
       setDrinks([]);
@@ -323,7 +155,7 @@ export default function InventoryClient() {
         setPackageDefaults({});
         return;
       }
-      const payload = (await response.json()) as InventoryPackageDefaults[];
+      const payload = await parseJsonResponse(response, parseInventoryPackageDefaults, "Gebinde-Vorgaben laden");
       const defaultsMap = payload.reduce<Partial<Record<PackageType, InventoryPackageDefaults>>>((acc, entry) => {
         acc[entry.packageType] = entry;
         return acc;
@@ -331,7 +163,7 @@ export default function InventoryClient() {
       setPackageDefaults(defaultsMap);
 
       setForm((current) => {
-        const dynamicDefaults = defaultsMap[current.packageType as PackageType];
+        const dynamicDefaults = defaultsMap[current.packageType];
         if (!dynamicDefaults) {
           return current;
         }
@@ -402,10 +234,10 @@ export default function InventoryClient() {
       name: source.name.trim(),
       linkedDrinkId: drinkId ?? selectedVariant?.drinkId ?? null,
       linkedDrinkVariantId: variantId,
-      packageType: source.packageType as InventoryItemUpsertRequest["packageType"],
+      packageType: source.packageType,
       packagesInStock: Number(source.packagesInStock),
       contentPerPackage,
-      contentUnit: source.contentUnit as InventoryItemUpsertRequest["contentUnit"],
+      contentUnit: source.contentUnit,
       reorderThreshold: reorderThresholdPackages * contentPerPackage,
       minimumStock: minimumStockPackages * contentPerPackage,
       reorderThresholdPackages,
@@ -432,8 +264,7 @@ export default function InventoryClient() {
     });
 
     if (!response.ok) {
-      const body = await response.json().catch(() => ({}));
-      setConfigError(body?.message || "Konfiguration konnte nicht angelegt werden.");
+      setConfigError(await readApiError(response, "Konfiguration konnte nicht angelegt werden."));
       return;
     }
 
@@ -459,14 +290,19 @@ export default function InventoryClient() {
     const variantId = parseOptionalId(form.linkedDrinkVariantId);
     const selectedVariant = variants.find((variant) => variant.id === variantId);
 
+    if (!isPackageType(existing.packageType) || !isContentUnit(existing.contentUnit)) {
+      setConfigError("Der Bestandseintrag enthält eine unbekannte Gebindeart oder Einheit.");
+      return;
+    }
+
     const payload: InventoryItemUpsertRequest = {
       name: existing.name,
       linkedDrinkId: drinkId ?? selectedVariant?.drinkId ?? null,
       linkedDrinkVariantId: variantId,
-      packageType: existing.packageType as InventoryItemUpsertRequest["packageType"],
+      packageType: existing.packageType,
       packagesInStock: Number(existing.packagesInStock),
       contentPerPackage: Number(existing.contentPerPackage),
-      contentUnit: existing.contentUnit as InventoryItemUpsertRequest["contentUnit"],
+      contentUnit: existing.contentUnit,
       reorderThreshold: Number(existing.reorderThreshold),
       minimumStock: Number(existing.minimumStock),
       supplier: existing.supplier,
@@ -480,8 +316,7 @@ export default function InventoryClient() {
     });
 
     if (!response.ok) {
-      const body = await response.json().catch(() => ({}));
-      setConfigError(body?.message || "Verknüpfung konnte nicht gespeichert werden.");
+      setConfigError(await readApiError(response, "Verknüpfung konnte nicht gespeichert werden."));
       return;
     }
 
@@ -496,8 +331,7 @@ export default function InventoryClient() {
 
     const response = await fetch(`/api/inventory/${itemId}`, { method: "DELETE" });
     if (!response.ok) {
-      const body = await response.json().catch(() => ({}));
-      setConfigError(body?.message || "Position konnte nicht gelöscht werden.");
+      setConfigError(await readApiError(response, "Position konnte nicht gelöscht werden."));
       setDeletingItemId(null);
       return;
     }
@@ -715,7 +549,8 @@ export default function InventoryClient() {
                   id="item-package-type"
                   value={form.packageType}
                   onChange={(event) => {
-                    const nextPackageType = event.target.value as PackageType;
+                    const nextPackageType = event.target.value;
+                    if (!isPackageType(nextPackageType)) return;
                     const nextContentUnit = contentDefaultsByType[nextPackageType].contentUnit;
                     const nextContentPerPackage = nextPackageType === "CRATE"
                       ? calculateCrateContentPerPackage(nextContentUnit, form.bottlesPerCrate, form.litersPerBottle)
@@ -744,6 +579,7 @@ export default function InventoryClient() {
                   value={form.contentUnit}
                   onChange={(event) => {
                     const nextUnit = event.target.value;
+                    if (!isContentUnit(nextUnit)) return;
                     setForm((current) => ({
                       ...current,
                       contentUnit: nextUnit,
@@ -941,7 +777,7 @@ export default function InventoryClient() {
         <CardContent>
           <div className="space-y-3 md:hidden">
             {filteredItems.map((item) => {
-              const status = getStatus(item);
+              const status = getInventoryStatus(item);
               const stockDisplay = formatStockForArticle(item, variants);
               return (
                 <div key={item.id} className="rounded-[24px] border border-[color:var(--color-border-strong)] bg-[color:var(--color-surface)]/82 p-4 shadow-sm">
@@ -989,7 +825,7 @@ export default function InventoryClient() {
               </thead>
               <tbody>
                 {filteredItems.map((item) => {
-                  const status = getStatus(item);
+                  const status = getInventoryStatus(item);
                   const stockDisplay = formatStockForArticle(item, variants);
                   return (
                     <tr key={item.id} className="border-t border-[color:var(--color-border)] bg-[color:var(--color-surface)]/50">

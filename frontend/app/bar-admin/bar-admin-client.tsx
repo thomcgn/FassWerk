@@ -9,27 +9,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { useToastFeedback } from "@/lib/use-toast-feedback";
+import { parseJsonResponse, readApiError } from "@/lib/api-client";
+import { calculateAdjustedPrice, parseVolumePrices, prepareDrinkBatch, volumeByLabel } from "@/features/catalog/model";
+import { parseDrink, parseDrinkCategories, parseDrinks, parseDrinkVariants, parseInventoryItems } from "@/features/billing/model";
 import type { Drink, DrinkCategory, DrinkVariant, VolumePrice, InventoryItem } from "@/types/api";
-
-type ApiError = { message?: string; error?: string };
-
-async function readError(response: Response, fallback: string) {
-  const payload = (await response.clone().json().catch(() => null)) as ApiError | null;
-  if (payload?.message || payload?.error) {
-    return payload.message || payload.error || fallback;
-  }
-
-  const textBody = await response.clone().text().catch(() => "");
-  if (textBody.trim().length > 0) {
-    return textBody;
-  }
-
-  if (response.status === 401) return "Bitte neu einloggen.";
-  if (response.status === 403) return "Keine Berechtigung für diese Aktion.";
-  if (response.status === 409) return "Ein Eintrag mit diesem Namen existiert bereits.";
-  if (response.status === 422 || response.status === 400) return "Bitte Eingaben prüfen.";
-  return fallback;
-}
 
 type EditMode = null
   | { type: "category"; id: number; name: string; sortOrder: string }
@@ -53,26 +36,6 @@ type BatchVariantTemplate = {
   name: string;
   rows: Array<Pick<BatchVariantRow, "label" | "price">>;
 };
-
-const COMMON_VOLUME_PRESETS = [
-  { volumeMl: 200, label: "0,2 l", defaultPrice: "3.90" },
-  { volumeMl: 330, label: "0,33 l", defaultPrice: "4.50" },
-  { volumeMl: 500, label: "0,5 l", defaultPrice: "5.90" },
-] as const;
-
-function getLabelToVolumeMlMap(): Record<string, number> {
-  const map: Record<string, number> = {};
-  for (const preset of COMMON_VOLUME_PRESETS) {
-    map[preset.label] = preset.volumeMl;
-  }
-  // Zusätzliche Labels
-  map["0,3 l"] = 300;
-  map["0,4 l"] = 400;
-  map["0,75 l"] = 750;
-  map["2 cl"] = 20;
-  map["4 cl"] = 40;
-  return map;
-}
 
 const BATCH_VARIANT_TEMPLATES: BatchVariantTemplate[] = [
   {
@@ -166,13 +129,13 @@ export default function BarAdminClient() {
       return;
     }
 
-    const [categoriesPayload, drinksPayload, variantsPayload, volumePricesPayload, inventoryPayload] = (await Promise.all([
-      categoriesRes.json(),
-      drinksRes.json(),
-      variantsRes.json(),
-      volumePricesRes.json(),
-      inventoryRes.json(),
-    ])) as [DrinkCategory[], Drink[], DrinkVariant[], VolumePrice[], InventoryItem[]];
+    const [categoriesPayload, drinksPayload, variantsPayload, volumePricesPayload, inventoryPayload] = await Promise.all([
+      parseJsonResponse(categoriesRes, parseDrinkCategories, "Kategorien laden"),
+      parseJsonResponse(drinksRes, parseDrinks, "Getränke laden"),
+      parseJsonResponse(variantsRes, parseDrinkVariants, "Varianten laden"),
+      parseJsonResponse(volumePricesRes, parseVolumePrices, "Volumenpreise laden"),
+      parseJsonResponse(inventoryRes, parseInventoryItems, "Bestand laden"),
+    ]);
 
     setCategories(categoriesPayload);
     setDrinks(drinksPayload);
@@ -220,7 +183,7 @@ export default function BarAdminClient() {
     });
 
     if (!response.ok) {
-      setError(await readError(response, "Kategorie konnte nicht angelegt werden."));
+      setError(await readApiError(response, "Kategorie konnte nicht angelegt werden."));
       return;
     }
 
@@ -290,62 +253,12 @@ export default function BarAdminClient() {
     setError(null);
     setStatus(null);
 
-    const categoryId = Number(drinkCategoryId);
-
-    if (!Number.isInteger(categoryId) || categoryId <= 0) {
-      setError("Bitte eine Kategorie auswählen.");
+    const prepared = prepareDrinkBatch(drinkCategoryId, batchRows, batchVariantRows);
+    if (!prepared.batch) {
+      setError(prepared.error);
       return;
     }
-
-    const rowsToCreate = batchRows
-      .map((row) => ({ ...row, name: row.name.trim(), description: row.description.trim() }))
-      .filter((row) => row.name.length > 0);
-
-    const variantsToCreate = batchVariantRows
-      .map((variant) => ({
-        ...variant,
-        label: variant.label.trim(),
-        price: Number(variant.price),
-      }))
-      .filter((variant) => variant.label.length > 0 && Number.isFinite(variant.price));
-
-    if (rowsToCreate.length === 0) {
-      setError("Bitte mindestens ein Getränk eintragen.");
-      return;
-    }
-
-    if (variantsToCreate.length === 0) {
-      setError("Bitte mindestens eine Variante mit Label und Preis angeben.");
-      return;
-    }
-
-    for (let index = 0; index < variantsToCreate.length; index += 1) {
-      const variant = variantsToCreate[index];
-      if (!variant.label) {
-        setError(`Bitte ein Varianten-Label in Zeile ${index + 1} angeben.`);
-        return;
-      }
-      if (!Number.isFinite(variant.price) || variant.price < 0) {
-        setError(`Bitte einen gültigen Preis in Varianten-Zeile ${index + 1} eingeben.`);
-        return;
-      }
-    }
-
-    const duplicateNames = rowsToCreate
-      .map((row) => row.name.toLocaleLowerCase("de-DE"))
-      .filter((name, index, all) => all.indexOf(name) !== index);
-    if (duplicateNames.length > 0) {
-      setError("Bitte doppelte Getränkenamen in der Liste entfernen.");
-      return;
-    }
-
-    const duplicateVariantLabels = variantsToCreate
-      .map((variant) => variant.label.toLocaleLowerCase("de-DE"))
-      .filter((label, index, all) => all.indexOf(label) !== index);
-    if (duplicateVariantLabels.length > 0) {
-      setError("Bitte doppelte Varianten-Labels in der Liste entfernen.");
-      return;
-    }
+    const { categoryId, drinks: rowsToCreate, variants: variantsToCreate } = prepared.batch;
 
     setIsCreatingBatch(true);
     let createdCount = 0;
@@ -367,13 +280,13 @@ export default function BarAdminClient() {
 
       if (!drinkResponse.ok) {
         setIsCreatingBatch(false);
-        const reason = await readError(drinkResponse, "Getraenk konnte nicht angelegt werden.");
+        const reason = await readApiError(drinkResponse, "Getraenk konnte nicht angelegt werden.");
         setError(`Fehler in Zeile ${index + 1} (${row.name}): ${reason}`);
         await loadAll();
         return;
       }
 
-      const createdDrink = (await drinkResponse.json().catch(() => null)) as Drink | null;
+      const createdDrink = await parseJsonResponse(drinkResponse, parseDrink, "Getränk anlegen").catch(() => null);
       if (!createdDrink?.id) {
         setIsCreatingBatch(false);
         setError(`Getraenk '${row.name}' wurde angelegt, konnte aber nicht weiterverarbeitet werden.`);
@@ -383,22 +296,13 @@ export default function BarAdminClient() {
 
       for (let variantIndex = 0; variantIndex < variantsToCreate.length; variantIndex += 1) {
         const variant = variantsToCreate[variantIndex];
-        const labelToVolumeMl = getLabelToVolumeMlMap();
-        const volumeMl = labelToVolumeMl[variant.label];
-        if (!volumeMl) {
-          setIsCreatingBatch(false);
-          setError(`Unbekanntes Label '${variant.label}' in Varianten-Zeile ${variantIndex + 1}. Bitte ein Standard-Label wählen.`);
-          await loadAll();
-          return;
-        }
-
         const variantResponse = await fetch("/api/drink-variants", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             drinkId: createdDrink.id,
             displayVolumeName: variant.label,
-            volumeMl,
+            volumeMl: variant.volumeMl,
             useStandardPrice: false,
             price: Number(variant.price).toFixed(2),
             sku: null,
@@ -408,7 +312,7 @@ export default function BarAdminClient() {
 
         if (!variantResponse.ok) {
           setIsCreatingBatch(false);
-          const reason = await readError(variantResponse, "Variante konnte nicht angelegt werden.");
+          const reason = await readApiError(variantResponse, "Variante konnte nicht angelegt werden.");
           setError(`Getraenk '${row.name}' wurde erstellt, aber Variante ${variant.label} fehlt: ${reason}`);
           await loadAll();
           return;
@@ -443,7 +347,7 @@ export default function BarAdminClient() {
     });
 
     if (!response.ok) {
-      setError(await readError(response, "Getrank konnte nicht aktualisiert werden."));
+      setError(await readApiError(response, "Getrank konnte nicht aktualisiert werden."));
       return;
     }
 
@@ -459,7 +363,7 @@ export default function BarAdminClient() {
     const response = await fetch(`/api/drinks/${id}`, { method: "DELETE" });
 
     if (!response.ok) {
-      setError(await readError(response, "Drink konnte nicht gelöscht werden."));
+      setError(await readApiError(response, "Drink konnte nicht gelöscht werden."));
       setDeletingDrink(false);
       return;
     }
@@ -477,7 +381,7 @@ export default function BarAdminClient() {
     const response = await fetch(`/api/drink-categories/${id}`, { method: "DELETE" });
 
     if (!response.ok) {
-      setError(await readError(response, "Kategorie konnte nicht gelöscht werden."));
+      setError(await readApiError(response, "Kategorie konnte nicht gelöscht werden."));
       setDeletingCategory(false);
       return;
     }
@@ -516,7 +420,7 @@ export default function BarAdminClient() {
     });
 
     if (!response.ok) {
-      setError(await readError(response, "Kategorie konnte nicht aktualisiert werden."));
+      setError(await readApiError(response, "Kategorie konnte nicht aktualisiert werden."));
       return;
     }
 
@@ -532,7 +436,7 @@ export default function BarAdminClient() {
     const response = await fetch(`/api/drink-variants/${id}`, { method: "DELETE" });
 
     if (!response.ok) {
-      setError(await readError(response, "Variante konnte nicht gelöscht werden."));
+      setError(await readApiError(response, "Variante konnte nicht gelöscht werden."));
       return;
     }
 
@@ -557,7 +461,7 @@ export default function BarAdminClient() {
     });
 
     if (!response.ok) {
-      setError(await readError(response, "Variante konnte nicht angelegt werden."));
+      setError(await readApiError(response, "Variante konnte nicht angelegt werden."));
       return;
     }
 
@@ -593,7 +497,7 @@ export default function BarAdminClient() {
     });
 
     if (!response.ok) {
-      setError(await readError(response, "Variante konnte nicht aktualisiert werden."));
+      setError(await readApiError(response, "Variante konnte nicht aktualisiert werden."));
       return;
     }
 
@@ -624,16 +528,11 @@ export default function BarAdminClient() {
       return;
     }
 
-    const currentPrice = Number(selectedEntry.price);
-    if (!Number.isFinite(currentPrice)) {
-      setError("Der aktuelle Preis der Auswahl ist ungueltig.");
+    const nextPrice = calculateAdjustedPrice(selectedEntry.price, bulkPriceValue, bulkPriceMode);
+    if (nextPrice === null) {
+      setError("Der aktuelle Preis oder Anpassungswert ist ungueltig.");
       return;
     }
-
-    const nextPriceRaw = bulkPriceMode === "ABSOLUTE"
-      ? currentPrice + value
-      : currentPrice * (1 + (value / 100));
-    const nextPrice = Math.max(0, Number(nextPriceRaw.toFixed(2)));
 
     setApplyingSelectedPriceAdjust(true);
     const response = await fetch(`/api/volume-prices/${selectedEntry.volumeMl}`, {
@@ -644,7 +543,7 @@ export default function BarAdminClient() {
     setApplyingSelectedPriceAdjust(false);
 
     if (!response.ok) {
-      setError(await readError(response, "Ausgewaehlter Volumenpreis konnte nicht aktualisiert werden."));
+      setError(await readApiError(response, "Ausgewaehlter Volumenpreis konnte nicht aktualisiert werden."));
       await loadAll();
       return;
     }
@@ -772,7 +671,7 @@ export default function BarAdminClient() {
                     onChange={(event) => updateBatchVariantRow(row.id, { label: event.target.value })}
                   >
                     <option value="">Label wählen...</option>
-                    {Object.keys(getLabelToVolumeMlMap())
+                    {Object.keys(volumeByLabel)
                       .sort()
                       .map((label) => (
                         <option key={label} value={label}>{label}</option>

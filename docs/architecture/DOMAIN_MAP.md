@@ -346,3 +346,13 @@ release. Inventory owns available quantity, movement journal, sales projection a
 reorder calculation. The synchronous Billing -> Inventory command intentionally
 shares the caller transaction: no side may commit a half operation. Catalog retirement
 preserves Billing history. See `BILLING_INVENTORY_RULES.md` and `PHASE_8_REPORT.md`.
+
+## Phase 9: Frontend Boundaries
+
+The frontend mirrors backend ownership only where rules are actually needed:
+`features/reservation`, `features/billing`, `features/inventory` and
+`features/catalog` contain pure view/application models. App Router files remain
+composition and BFF-facing adapters; shared UI components remain presentation.
+`lib/api-client.ts` is technical infrastructure, while `types/api.ts` remains the
+single compile-time DTO location until Phase 10 decides the API-contract strategy.
+No frontend feature is allowed to redefine backend transactional invariants.
