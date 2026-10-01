@@ -2,3 +2,7 @@
 .env
 .env.*
 !.env.example
+
+# Keep Markdown documentation local, except the root README.md
+*.md
+!/README.md
