@@ -6,7 +6,7 @@ COPY src ./src
 # Full verification is the mandatory CI predecessor; this stage only packages the verified commit.
 RUN --mount=type=cache,target=/root/.m2 mvn -B -Dmaven.test.skip=true clean package
 
-FROM eclipse-temurin:21-jre@sha256:d7051a45dd955e4d5d1db4d3f4269fe13d1c6dff8cc6b7ef89fc8577b96c1982 AS runtime
+FROM eclipse-temurin:25-jre@sha256:fcd7fd7b387f94bb2ac461478a7436ad8e349924c374ea8313919624dceae636 AS runtime
 WORKDIR /app
 
 ARG VCS_REF=unknown
