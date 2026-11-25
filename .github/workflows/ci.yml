@@ -36,7 +36,7 @@ jobs:
         run: ./mvnw -B clean verify
 
       - name: Upload verified backend for full-stack acceptance
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: verified-backend
           path: backend/target/backend-*.jar
@@ -49,7 +49,7 @@ jobs:
 
       - name: Upload backend tests and coverage
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: backend-test-reports
           path: |
@@ -106,7 +106,7 @@ jobs:
 
       - name: Upload backend startup log
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: backend-openapi-startup-log
           path: backend/target/openapi-backend.log
@@ -118,7 +118,7 @@ jobs:
 
       - name: Upload OpenAPI artifact
         if: ${{ always() && env.OPENAPI_FILE != '' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: openapi-spec
           path: ${{ env.OPENAPI_FILE }}
@@ -136,7 +136,7 @@ jobs:
 
       - name: Upload backend vulnerability report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: backend-vulnerabilities
           path: backend-vulnerabilities.json
@@ -158,7 +158,7 @@ jobs:
         run: npm audit --audit-level=high --json > npm-audit.json
       - name: Upload npm vulnerability report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: npm-audit
           path: frontend/npm-audit.json
@@ -229,7 +229,7 @@ jobs:
 
       - name: Upload full-stack acceptance result
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: fullstack-acceptance
           path: frontend/fullstack-acceptance.log
@@ -238,7 +238,7 @@ jobs:
 
       - name: Upload Playwright results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-results
           path: |
@@ -307,7 +307,7 @@ jobs:
 
       - name: Upload container vulnerability reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: container-vulnerabilities
           path: '*-image-vulnerabilities.json'
