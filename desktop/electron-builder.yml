@@ -1,0 +1,35 @@
+appId: de.fasswerk.desktop
+productName: FassWerk
+
+files:
+  - out/*.js
+  - out/*.html
+  - out/*.css
+  - package.json
+
+# Die Laufzeit-Bestandteile werden von scripts/build-app.sh unter desktop/resources/ bereitgestellt
+# und liegen im gepackten Programm direkt unter process.resourcesPath.
+extraResources:
+  - from: resources/backend
+    to: backend
+  - from: resources/frontend
+    to: frontend
+  - from: resources/jre
+    to: jre
+  - from: resources/postgres
+    to: postgres
+
+asar: true
+
+win:
+  target:
+    - nsis
+
+mac:
+  target:
+    - dmg
+
+linux:
+  target:
+    - AppImage
+  category: Office

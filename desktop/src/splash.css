@@ -1,0 +1,23 @@
+@import "tailwindcss";
+@source "./splash.html";
+
+/* Design-Tokens aus der shadcn-Konfiguration des Frontends (dunkles Gastro-Theme). */
+@theme {
+  --color-fw-bg: #050c10;
+  --color-fw-panel: rgba(14, 27, 34, 0.94);
+  --color-fw-border: rgba(34, 211, 238, 0.24);
+  --color-fw-cyan: #22d3ee;
+  --color-fw-soft: #a5eaf5;
+  --color-fw-muted: #7fa7b3;
+  --color-fw-text: #e6f6fa;
+  --color-fw-success: #34d399;
+  --color-fw-danger: #f87171;
+  --radius-fw: 0.875rem;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  color-scheme: dark;
+}

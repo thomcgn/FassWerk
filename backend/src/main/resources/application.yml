@@ -57,6 +57,11 @@ app:
   bootstrap:
     admin-email: ${BOOTSTRAP_ADMIN_EMAIL:}
     admin-password: ${BOOTSTRAP_ADMIN_PASSWORD:}
+  # Nur für die lokale Desktop-App: einfacher Staff-Login statt generiertem Admin-Passwort.
+  desktop:
+    staff-login: ${DESKTOP_STAFF_LOGIN:false}
+    staff-email: ${DESKTOP_STAFF_EMAIL:staff@fasswerk.local}
+    staff-password: ${DESKTOP_STAFF_PASSWORD:}
   qr:
     scan-base-url: ${QR_SCAN_BASE_URL:http://localhost:3000}
   auth:

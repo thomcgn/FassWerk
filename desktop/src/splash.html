@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; style-src 'self' 'unsafe-inline' file:; script-src 'unsafe-inline'" />
+  <title>FassWerk wird gestartet</title>
+  <link rel="stylesheet" href="./splash.css" />
+</head>
+<body class="min-h-full bg-fw-bg font-sans text-fw-text antialiased"
+      style="background-image: radial-gradient(circle at 20% 0%, #0d2b33 0%, #07141a 45%, #050c10 100%)">
+
+  <main class="flex min-h-full items-center justify-center p-6">
+    <section class="w-full max-w-md rounded-fw border border-fw-border bg-fw-panel p-7 shadow-2xl">
+
+      <header class="mb-6 flex items-center gap-3.5">
+        <div class="grid size-11 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-fw-cyan to-cyan-700 text-2xl shadow-lg shadow-cyan-500/20">
+          🍺
+        </div>
+        <div>
+          <h1 class="m-0 text-2xl font-bold tracking-tight">FassWerk</h1>
+          <p class="m-0 text-xs text-fw-muted">Digitale Betriebssteuerung für Gastronomie</p>
+        </div>
+      </header>
+
+      <ol class="m-0 list-none space-y-0.5 p-0 text-sm">
+        <li data-step="runtime" class="flex items-center gap-3 border-b border-white/5 py-2.5 text-fw-muted">
+          <span class="size-[18px] shrink-0 rounded-full border-2 border-white/20"></span>
+          <span>Laufzeit wird geprüft</span>
+        </li>
+        <li data-step="database" class="flex items-center gap-3 border-b border-white/5 py-2.5 text-fw-muted">
+          <span class="size-[18px] shrink-0 rounded-full border-2 border-white/20"></span>
+          <span>Datenbank wird vorbereitet</span>
+        </li>
+        <li data-step="backend" class="flex items-center gap-3 border-b border-white/5 py-2.5 text-fw-muted">
+          <span class="size-[18px] shrink-0 rounded-full border-2 border-white/20"></span>
+          <span>Backend wird gestartet</span>
+        </li>
+        <li data-step="frontend" class="flex items-center gap-3 border-b border-white/5 py-2.5 text-fw-muted">
+          <span class="size-[18px] shrink-0 rounded-full border-2 border-white/20"></span>
+          <span>Oberfläche wird geladen</span>
+        </li>
+        <li data-step="ready" class="flex items-center gap-3 py-2.5 text-fw-muted">
+          <span class="size-[18px] shrink-0 rounded-full border-2 border-white/20"></span>
+          <span>Bereit</span>
+        </li>
+      </ol>
+
+      <p id="message" class="mt-5 min-h-4 text-xs text-fw-muted">FassWerk startet die lokalen Dienste …</p>
+
+      <div id="credentials" class="mt-5 hidden rounded-xl border border-fw-success/25 bg-fw-success/5 p-4 text-xs leading-relaxed text-fw-soft">
+        <strong class="font-semibold text-fw-success">Erster Start – Admin-Zugang</strong><br />
+        Benutzer: <code id="credentials-email" class="text-fw-text"></code><br />
+        Passwort: <code id="credentials-password" class="text-fw-text"></code><br />
+        Steht zusätzlich in <code class="text-fw-text">Zugangsdaten.txt</code> im Datenverzeichnis.
+      </div>
+
+      <div class="mt-6 flex gap-2.5">
+        <button id="retry"
+                class="hidden rounded-lg border border-fw-border bg-fw-cyan/10 px-4 py-2 text-xs font-medium text-fw-soft transition hover:bg-fw-cyan/20">
+          Erneut versuchen
+        </button>
+        <button id="quit"
+                class="rounded-lg border border-white/10 px-4 py-2 text-xs font-medium text-fw-muted transition hover:bg-white/5">
+          Beenden
+        </button>
+      </div>
+
+    </section>
+  </main>
+
+  <script>
+    const api = window.fasswerk;
+    const message = document.getElementById("message");
+    const retry = document.getElementById("retry");
+    const items = Array.from(document.querySelectorAll(".steps li, ol li[data-step]"));
+
+    function setState(item, state) {
+      const dot = item.firstElementChild;
+      item.classList.remove("text-fw-muted", "text-fw-soft", "text-fw-danger", "text-fw-success");
+      dot.className = "size-[18px] shrink-0 rounded-full border-2 border-white/20";
+      if (state === "active") {
+        item.classList.add("text-fw-soft");
+        dot.className = "size-[18px] shrink-0 animate-spin rounded-full border-2 border-fw-cyan border-t-transparent";
+      } else if (state === "done") {
+        item.classList.add("text-fw-success");
+        dot.className = "relative grid size-[18px] shrink-0 place-items-center rounded-full border-2 border-fw-success bg-fw-success after:absolute after:h-[5px] after:w-[9px] after:-rotate-45 after:border-b-2 after:border-r-2 after:border-fw-bg after:content-['']";
+      } else if (state === "error") {
+        item.classList.add("text-fw-danger");
+        dot.className = "grid size-[18px] shrink-0 place-items-center rounded-full border-2 border-fw-danger bg-fw-danger/25 text-[10px] text-fw-danger";
+        dot.textContent = "!";
+      }
+    }
+
+    if (api) {
+      api.onProgress((progress) => {
+        message.textContent = progress.message;
+        const item = items.find((node) => node.dataset.step === progress.step);
+        if (item) setState(item, progress.state);
+        if (progress.state === "error") retry.classList.remove("hidden");
+      });
+      api.onCredentials((credentials) => {
+        document.getElementById("credentials-email").textContent = credentials.email;
+        document.getElementById("credentials-password").textContent = credentials.password;
+        document.getElementById("credentials").classList.remove("hidden");
+      });
+      retry.addEventListener("click", () => {
+        retry.classList.add("hidden");
+        message.textContent = "Neustart wird vorbereitet …";
+        items.forEach((node) => setState(node, "pending"));
+        api.retry();
+      });
+      document.getElementById("quit").addEventListener("click", () => api.quit());
+    } else {
+      message.textContent = "Start-Brücke konnte nicht geladen werden.";
+      retry.classList.remove("hidden");
+    }
+  </script>
+</body>
+</html>

@@ -21,10 +21,13 @@ export default function LoginPage() {
     setError(null);
 
     try {
+      const trimmed = email.trim();
+      // Kurzform für den lokalen Desktop-Zugang; das Backend erwartet weiterhin eine E-Mail-Adresse.
+      const loginEmail = trimmed.toLowerCase() === "staff" ? "staff@fasswerk.local" : trimmed;
       const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: loginEmail, password }),
       });
 
       if (!response.ok) {
@@ -82,15 +85,16 @@ export default function LoginPage() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-2.5">
-              <Label htmlFor="email" className="text-sm font-semibold">E-Mail</Label>
+              <Label htmlFor="email" className="text-sm font-semibold">Benutzer oder E-Mail</Label>
               <Input
                 id="email"
-                type="email"
+                type="text"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 required
+                autoComplete="username"
                 className="bg-white/5 border-cyan-500/20 focus:border-cyan-500/50 rounded-lg"
-                placeholder="admin@fasswerk.local"
+                placeholder="staff"
               />
             </div>
             <div className="space-y-2.5">

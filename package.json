@@ -1,0 +1,14 @@
+{
+  "name": "fasswerk",
+  "version": "0.1.0",
+  "private": true,
+  "description": "FassWerk – lokale Desktop-Anwendung",
+  "scripts": {
+    "desktop": "bash desktop/scripts/run-desktop.sh",
+    "desktop:build": "bash desktop/scripts/build-app.sh",
+    "desktop:test": "bash desktop/scripts/stack-smoke.sh"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "name": "fasswerk-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "FassWerk als eigenständige Desktop-Anwendung",
+  "author": "FassWerk",
+  "main": "out/main.js",
+  "scripts": {
+    "compile": "tsc -p tsconfig.json && node scripts/copy-assets.mjs && npm run compile:css",
+    "compile:css": "tailwindcss -i src/splash.css -o out/splash.css --minify",
+    "dev": "npm run compile && electron .",
+    "package": "electron-builder",
+    "package:dir": "electron-builder --dir",
+    "build": "npm run compile && npm run package",
+    "pack": "bash scripts/build-app.sh",
+    "prepare:resources": "bash scripts/prepare-resources.sh",
+    "test:stack": "bash scripts/stack-smoke.sh",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "extract-zip": "^2.0.1",
+    "tar": "^7.5.2"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.3.5",
+    "@types/node": "^22.15.0",
+    "electron": "^45.5.0",
+    "electron-builder": "^26.18.0",
+    "typescript": "^5.9.3"
+  }
+}

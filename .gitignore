@@ -6,3 +6,10 @@
 # Keep Markdown documentation local, except the root README.md
 *.md
 !/README.md
+
+# Electron desktop app: dependencies, build output and staged native runtimes
+desktop/node_modules/
+desktop/out/
+desktop/dist/
+desktop/resources/*
+!desktop/resources/.gitkeep

@@ -12,7 +12,7 @@ Einmal erfassen. Im gesamten Betrieb berücksichtigen.
 
 Was ist FassWerk?
 
-FassWerk ist eine webbasierte Anwendung für Gastronomiebetriebe.
+FassWerk ist eine eigenständige Desktop-Anwendung für Gastronomiebetriebe. Alle Dienste laufen lokal auf dem Gerät – es wird nichts gehostet.
 
 Im Mittelpunkt steht nicht die Digitalisierung einzelner Formulare, sondern die Verbindung der täglichen Arbeitsabläufe.
 
@@ -269,27 +269,24 @@ Berechtigungen werden nicht nur in der Benutzeroberfläche ausgeblendet, sondern
 
 Technische Architektur
 
-FassWerk ist eine moderne Fullstack-Webanwendung.
+FassWerk ist eine Desktop-Anwendung. Electron startet beim Programmstart alle lokalen Dienste und zeigt den Fortschritt in einem Ladebildschirm. Es wird nichts gehostet.
 
-Browser / Tablet
-       │
-       ▼
-┌─────────────────────┐
-│ Next.js / React     │
-│ Frontend            │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│ Spring Boot         │
-│ REST Backend        │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│ PostgreSQL          │
-│ Datenbank           │
-└─────────────────────┘
+┌──────────────────────────────────────────────┐
+│ Electron (Hauptprozess)                      │
+│  Ladebildschirm · Prozess-Startup · Health   │
+└───────────────┬──────────────────────────────┘
+                │ startet & überwacht
+     ┌──────────┼─────────────────┐
+     ▼          ▼                 ▼
+PostgreSQL   Spring Boot      Next.js
+(lokal)      REST Backend     Standalone-Server
+     │          │                 │
+     └──────────┴─────────────────┘
+                │
+                ▼
+        BrowserWindow (UI)
+
+Der Next.js-Server bleibt erhalten, weil die API-Routen, httpOnly-Cookies und die CSRF-Prüfung serverseitig liegen. Die Anwendung läuft ausschließlich auf 127.0.0.1; externe Navigation wird blockiert.
 
 Backend
 
@@ -297,23 +294,23 @@ Backend
 * Spring Boot 4
 * Spring Security
 * REST API
-* PostgreSQL
+* PostgreSQL (lokal, in das Paket eingebunden)
 * Flyway
 
 Frontend
 
-* Next.js 16
+* Next.js 16 (Standalone-Build)
 * React 19
 * TypeScript
 * App Router
 
-Infrastruktur
+Desktop
 
-* Docker
-* Docker Compose
-* Healthchecks
-* persistente PostgreSQL-Datenbank
-* getrennte Umgebungskonfiguration
+* Electron 45
+* electron-builder (NSIS / DMG / AppImage)
+* Ladebildschirm mit Startfortschritt
+* lokale Datenbank im userData-Verzeichnis
+* generierte JWT-/DB-Secrets, Zugangsdaten beim ersten Start
 
 ⸻
 
@@ -322,32 +319,53 @@ Projektstruktur
 FassWerk/
 ├── backend/             Spring-Boot-Backend
 ├── frontend/            Next.js-Frontend
+├── desktop/             Electron-App, Packaging, Startlogik
 ├── docs/                Technische Dokumentation
-├── docker-compose.yml   Container-Setup
 └── README.md
 
 ⸻
 
-Lokal ausführen
+Programm bauen und starten
 
-Docker
+Voraussetzungen: Node.js 22+ und Java 21+ (nur für den Backend-Build). JRE und PostgreSQL werden automatisch heruntergeladen.
 
-Für den einfachsten lokalen Betrieb werden Docker und Docker Compose benötigt.
+Vollständiges Paket bauen:
 
-Nach Einrichtung der notwendigen Umgebungsvariablen:
+./desktop/scripts/build-app.sh
 
-docker compose up --build
+Das Skript baut Backend und Frontend, prüft die nativen Laufzeiten, lädt fehlende Bestandteile (Temurin-JRE 21 und PostgreSQL 16) herunter und erzeugt ein Installationspaket unter desktop/dist/. Der Download wird dabei im Terminal mit Fortschritt angezeigt und einmalig unter desktop/resources/ gespeichert.
 
-Docker startet die benötigten Komponenten gemeinsam:
+Beim Start der Anwendung passiert dasselbe automatisch: Fehlt im installierten Programm eine Laufzeit, wird sie im Ladebildschirm nachgeladen und dauerhaft im Datenverzeichnis gespeichert. Es muss dann nichts manuell installiert werden.
 
-PostgreSQL
-    +
-Spring Boot Backend
-    +
-Next.js Frontend
+Eigene Binaries verwenden (offline, ohne Download):
 
-Zugangsdaten und Secrets werden über die Umgebungskonfiguration bereitgestellt und gehören nicht in das Repository.
+PG_HOME=/pfad/zu/postgres FW_JRE_DIR=/pfad/zu/jre ./desktop/scripts/build-app.sh
 
+Oder nachträglich:
+
+cd desktop && PG_HOME=/pfad/zu/postgres FW_JRE_DIR=/pfad/zu/jre npm run prepare:resources
+
+Alles mit einem Befehl starten:
+
+npm run desktop
+
+Der Befehl baut fehlende Bestandteile, lädt JRE und PostgreSQL falls nötig und startet Electron mit Ladebildschirm.
+
+Weitere Befehle:
+
+* npm run desktop:build – installierbares Paket bauen
+* npm run desktop:test – lokalen Stack ohne GUI prüfen
+
+Fester lokaler Login: Benutzer `staff`, Passwort `fasswerk` (im Formular genügt `staff` als Benutzername). Die Zugangsdaten erscheinen auch in einem Dialog und in Zugangsdaten.txt im Datenverzeichnis. JWT- und DB-Secrets werden beim ersten Start automatisch erzeugt.
+
+Optionale Konfiguration über Umgebungsvariablen:
+
+* FW_POSTGRES_PORT – Datenbankport (Standard 55432)
+* FW_BACKEND_PORT – Backendport (Standard 8080)
+* FW_FRONTEND_PORT – Oberflächenport (Standard 3000)
+* FW_POSTGRES_BIN – Verzeichnis mit initdb/pg_ctl/postgres
+* FW_JAVA – Pfad zu einer vorhandenen java-Binary
+* FW_BACKEND_JAR – Pfad zur Backend-JAR
 ⸻
 
 Qualitätssicherung
