@@ -21,7 +21,7 @@
         <java.version>21</java.version>
         <!-- Security fix newer than the Boot 4.0.8 BOM; remove when Boot manages >= 11.0.25. -->
         <tomcat.version>11.0.25</tomcat.version>
-        <jjwt.version>0.12.7</jjwt.version>
+        <jjwt.version>0.13.0</jjwt.version>
         <zxing.version>3.5.3</zxing.version>
         <pdfbox.version>3.0.4</pdfbox.version>
         <flyway.url>${env.DB_URL}</flyway.url>
